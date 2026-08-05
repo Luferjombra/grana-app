@@ -11,5 +11,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // PKCE amarra a troca do código ao verifier salvo neste dispositivo —
+    // um link de OAuth/recovery forjado por terceiros não tem esse verifier
+    // e falha na troca em vez de logar o usuário na conta errada.
+    flowType: 'pkce',
   },
 });

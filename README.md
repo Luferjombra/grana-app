@@ -76,6 +76,12 @@ Financeiro`, `sa-east-1`):
 > Isso já foi aplicado no projeto atual — rodar de novo só é necessário ao
 > recriar o ambiente (ex: novo projeto Supabase de staging).
 
+No projeto já provisionado, aplicar também as migrations incrementais em
+`infra/supabase/migrations/`, em ordem numérica, cada uma exatamente uma vez:
+
+1. `0001_profiles_consent.sql` — adiciona `terms_accepted_at`/`terms_version`
+   em `profiles` e atualiza o trigger de cadastro (specs/04).
+
 ## Variáveis de ambiente por app
 
 | App | Arquivo | Variáveis |

@@ -22,6 +22,6 @@
       "favicon": "./assets/favicon.png"
     },
     "scheme": "grana",
-    "plugins": ["expo-router", "expo-status-bar"]
+    "plugins": ["expo-router", "expo-status-bar", "expo-web-browser"]
   }
 }

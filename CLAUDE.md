@@ -71,9 +71,13 @@ Variáveis esperadas: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
 
 ## Arquivos desta pasta
 
-- `schema.sql` — schema completo já aplicado no Supabase.
-- `rls_policies.sql` — políticas de RLS já aplicadas.
-- `signup_trigger.sql` — trigger de criação de household já aplicado.
+- `infra/supabase/schema.sql` — schema completo já aplicado no Supabase.
+- `infra/supabase/policies/*.sql` — políticas de RLS já aplicadas (uma por tabela).
+- `infra/supabase/seed/categorias.sql` — seed das 9 categorias padrão, já rodado.
+- `infra/supabase/signup_trigger.sql` — trigger de criação de household já aplicado.
+- `infra/supabase/migrations/` — migrations incrementais pro Supabase já
+  provisionado (schema.sql/signup_trigger.sql refletem o estado alvo "do
+  zero"; o que já está em produção precisa rodar cada migration em ordem).
 - `specs/01` a `specs/09` — specs técnicas detalhadas de cada frente
   (scaffold do monorepo, RLS, seed, cadastro/login, adaptador OCR, adaptador
   Open Finance, job de projeção/notificação, push, contrato da API REST).
@@ -81,17 +85,33 @@ Variáveis esperadas: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
   início, atividade, insights, metas, notificações, adicionar despesa) —
   usar como referência de UX/copy ao implementar as telas React Native.
 
+## Status atual (atualizado a cada commit — ver regra no fluxo de trabalho)
+
+- ✅ **Spec 01 (scaffold do monorepo)** — `apps/mobile` (Expo Router + TS),
+  `apps/backend` (FastAPI por domínio, providers mock), `etl/` (stubs +
+  convenção `etl_runs`), tooling (ruff/black/eslint/prettier/pre-commit/CI).
+  Repo no GitHub: `Luferjombra/grana-app`.
+- ✅ **Spec 04 (cadastro/login)** — telas de cadastro (e-mail/senha + Google,
+  consentimento LGPD com `terms_accepted_at`/`terms_version`), login, esqueci
+  minha senha (fluxo PKCE), e gate de sessão pra profile ausente. Fluxo OAuth
+  e recovery usam `flowType: 'pkce'` no client Supabase — exige que o
+  Redirect URL `grana://` (sem path) esteja na allow-list do Supabase Auth
+  (já configurado).
+- ⏳ Specs 02/03 (schema/RLS/seed) — aplicadas manualmente, sem script de
+  aplicação automatizado ainda.
+- ⏳ Specs 05, 06, 07, 08, 09 — não iniciadas (ver próximos passos).
+
 ## Próximos passos sugeridos (retomar por aqui)
 
-1. Scaffold do monorepo seguindo `specs/01-scaffold-monorepo.md`.
-2. Implementar os adaptadores `ReceiptOcrProvider`/`MindeeProvider` e
-   `BankAggregatorProvider`/`PluggyProvider` com `MockProvider` de fallback
-   (specs 05 e 06).
-3. Implementar os endpoints do contrato da API (spec 09).
-4. Implementar o app mobile, tela por tela, usando o protótipo HTML como
-   referência visual — nessa etapa nasce o projeto Expo/EAS, resolvendo a
-   pendência de push notifications (spec 08).
-5. Job de projeção/notificação (spec 07).
+1. Implementar os adaptadores `ReceiptOcrProvider`/`MindeeProvider` e
+   `BankAggregatorProvider`/`PluggyProvider` de verdade — hoje só existe
+   `MockProvider` (specs 05 e 06).
+2. Implementar os endpoints do contrato da API de verdade — hoje são stubs
+   que levantam `NotImplementedError` (spec 09).
+3. Telas de onboarding de dados (perfil CLT/autônomo, salário do mês) — hoje
+   o pós-cadastro cai direto no dashboard vazio, essas telas ainda não têm spec.
+4. Job de projeção/notificação (spec 07).
+5. Push notifications — nasce o projeto Expo/EAS (spec 08).
 
 ## Como o usuário prefere trabalhar
 
@@ -99,3 +119,12 @@ Direto e aberto — questionar decisões antes de assumir default, não
 implementar silenciosamente uma escolha ambígua. Prefere specs/decisões
 resolvidas antes de código ser escrito quando o escopo é grande; pra ajustes
 pontuais, pode ir direto ao código.
+
+## Fluxo de trabalho obrigatório (não pular, mesmo sem o usuário pedir de novo)
+
+1. **Sempre rodar `/code-review` (pair programming) antes de qualquer commit**,
+   corrigindo os achados relevantes antes de commitar — não só na primeira vez
+   que for pedido, em **todo** commit deste projeto daqui pra frente.
+2. **Ao commitar, atualizar a seção "Status atual" deste CLAUDE.md** pra
+   refletir o que mudou (specs concluídas, pendências novas) — este arquivo é
+   o handoff entre sessões, não pode ficar desatualizado.

@@ -34,6 +34,8 @@ create table profiles (
   household_id      bigint references households(id), -- criado 1:1 no cadastro (backlog: convite de membro)
   full_name         text,
   income_profile    text check (income_profile in ('clt','autonomo')) default 'clt',
+  terms_accepted_at timestamptz, -- consentimento LGPD aceito no cadastro (specs/04)
+  terms_version     text,        -- versão do texto de consentimento aceito
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );
