@@ -1,0 +1,28 @@
+name: ETL cron
+
+on:
+  schedule:
+    # meia-noite America/Sao_Paulo (UTC-3)
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-jobs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      PLUGGY_CLIENT_ID: ${{ secrets.PLUGGY_CLIENT_ID }}
+      PLUGGY_CLIENT_SECRET: ${{ secrets.PLUGGY_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e "./etl"
+      - run: python -m etl.pluggy_sync
+      - run: python -m etl.projection_recompute
+      - run: python -m etl.bacen_indicadores

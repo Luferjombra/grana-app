@@ -1,0 +1,21 @@
+node_modules/
+.claude/settings.local.json
+.env
+.env*.local
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Expo / RN
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/web-build/
+apps/mobile/expo-env.d.ts
+/apps/mobile/ios
+/apps/mobile/android
