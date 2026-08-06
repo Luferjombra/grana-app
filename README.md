@@ -81,6 +81,10 @@ No projeto já provisionado, aplicar também as migrations incrementais em
 
 1. `0001_profiles_consent.sql` — adiciona `terms_accepted_at`/`terms_version`
    em `profiles` e atualiza o trigger de cadastro (specs/04).
+2. `0002_storage_receipts_policies.sql` — políticas de Storage pro bucket
+   `receipts` (specs/05). **Pré-requisito manual**: criar o bucket `receipts`
+   no painel do Supabase (Storage -> New bucket) marcado como **privado**
+   antes de rodar esta migration.
 
 ## Variáveis de ambiente por app
 

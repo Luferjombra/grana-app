@@ -6,7 +6,7 @@ from app.providers.receipt_ocr.base import ExtractedReceipt, ReceiptOcrProvider
 class MockReceiptOcrProvider(ReceiptOcrProvider):
     """Determinístico (hash da imagem) — usado quando MINDEE_API_KEY não está configurada."""
 
-    async def extract(self, image_bytes: bytes) -> ExtractedReceipt:
+    async def extract(self, image_bytes: bytes, filename: str) -> ExtractedReceipt:
         digest = hashlib.sha256(image_bytes).hexdigest()
         fake_amount = int(digest[:4], 16) / 100
 

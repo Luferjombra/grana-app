@@ -46,8 +46,12 @@ esse padrão. Alinhar facilita reaproveitar ETL entre os dois projetos no futuro
 As credenciais reais (chaves, secrets) NÃO estão neste arquivo por segurança —
 pedir pro usuário colar num `.env` local quando for configurar cada serviço.
 Variáveis esperadas: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
+`SUPABASE_JWT_SECRET` (Supabase -> Settings -> API -> JWT Settings),
 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`,
 `MINDEE_API_KEY`, `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`.
+
+Bucket `receipts` no Supabase Storage: **ainda não criado** — precisa ser
+criado manualmente (privado) antes de rodar a migration 0002 (ver README).
 
 ## Decisões de produto já fechadas (não reabrir sem justificativa nova)
 
@@ -99,19 +103,38 @@ Variáveis esperadas: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
   (já configurado).
 - ⏳ Specs 02/03 (schema/RLS/seed) — aplicadas manualmente, sem script de
   aplicação automatizado ainda.
-- ⏳ Specs 05, 06, 07, 08, 09 — não iniciadas (ver próximos passos).
+- 🟡 **Spec 05 (OCR de recibo) — Mindee pronto, Pluggy (spec 06) ainda não
+  iniciado.** `MindeeProvider` real implementado (SDK v5, `client.v1.Client` +
+  `product.ReceiptV5`, campos abaixo de 0.5 de confiança viram `null`),
+  endpoints `POST /receipts`, `GET /receipts/{id}`, `POST
+  /receipts/{id}/confirm` funcionando com auth JWT real (`app/auth.py`,
+  `SUPABASE_JWT_SECRET`) e Supabase Storage (bucket `receipts`, privado —
+  **pré-requisito manual**: criar o bucket no painel antes de rodar a
+  migration `0002_storage_receipts_policies.sql`). Processamento roda em
+  FastAPI `BackgroundTasks` (sem fila/Redis nesta fase). `confirm_receipt` usa
+  update condicional (`is_ matched_transaction_id null`) pra evitar duplicar
+  transaction em double-tap. Todas as chamadas ao Supabase (síncrono) rodam
+  via `asyncio.to_thread` pra não bloquear o event loop — seguir esse padrão
+  em qualquer endpoint novo que use `get_db()`.
+- ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
+- ⏳ Specs 07, 08, 09 (fora do que já existe pra recibos) — não iniciadas.
 
 ## Próximos passos sugeridos (retomar por aqui)
 
-1. Implementar os adaptadores `ReceiptOcrProvider`/`MindeeProvider` e
-   `BankAggregatorProvider`/`PluggyProvider` de verdade — hoje só existe
-   `MockProvider` (specs 05 e 06).
-2. Implementar os endpoints do contrato da API de verdade — hoje são stubs
-   que levantam `NotImplementedError` (spec 09).
+1. Implementar `BankAggregatorProvider`/`PluggyProvider` de verdade + rotas
+   de contas (`/accounts/connect-token`, `/accounts/callback`, etc.) — hoje só
+   existe `MockProvider` (spec 06). Decidir como o Pluggy Connect (widget web)
+   vai rodar dentro do app Expo (WebView vs SDK nativo) antes de codar.
+2. Implementar o resto dos endpoints do contrato da API — hoje só
+   `receipts/*` é real, o restante (`transactions`, `budget`, `gamification`,
+   `notifications`) ainda são stubs com `NotImplementedError` (spec 09).
 3. Telas de onboarding de dados (perfil CLT/autônomo, salário do mês) — hoje
    o pós-cadastro cai direto no dashboard vazio, essas telas ainda não têm spec.
 4. Job de projeção/notificação (spec 07).
 5. Push notifications — nasce o projeto Expo/EAS (spec 08).
+6. Tela mobile do fluxo de recibo (upload de foto, confirmação dos campos
+   extraídos) — o backend já está pronto, falta a UI que consome
+   `POST /receipts` → poll `GET /receipts/{id}` → `POST /receipts/{id}/confirm`.
 
 ## Como o usuário prefere trabalhar
 
