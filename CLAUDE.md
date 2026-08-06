@@ -46,12 +46,18 @@ esse padrão. Alinhar facilita reaproveitar ETL entre os dois projetos no futuro
 As credenciais reais (chaves, secrets) NÃO estão neste arquivo por segurança —
 pedir pro usuário colar num `.env` local quando for configurar cada serviço.
 Variáveis esperadas: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`,
-`SUPABASE_JWT_SECRET` (Supabase -> Settings -> API -> JWT Settings),
 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`,
 `MINDEE_API_KEY`, `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`.
 
-Bucket `receipts` no Supabase Storage: **ainda não criado** — precisa ser
-criado manualmente (privado) antes de rodar a migration 0002 (ver README).
+Não existe `SUPABASE_JWT_SECRET`: este projeto assina JWT com chave
+assimétrica (ECC P-256/ES256, em Settings -> JWT Keys), não com segredo
+compartilhado HS256 — o backend valida via JWKS público
+(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), que acompanha rotação de
+chave sozinho. Não reintroduzir validação HS256 (o backend rejeita HS256 de
+propósito, pra evitar algorithm confusion com a chave pública do JWKS).
+
+Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
+0002 (policies de leitura) já aplicada.
 
 ## Decisões de produto já fechadas (não reabrir sem justificativa nova)
 
@@ -107,10 +113,10 @@ criado manualmente (privado) antes de rodar a migration 0002 (ver README).
   iniciado.** `MindeeProvider` real implementado (SDK v5, `client.v1.Client` +
   `product.ReceiptV5`, campos abaixo de 0.5 de confiança viram `null`),
   endpoints `POST /receipts`, `GET /receipts/{id}`, `POST
-  /receipts/{id}/confirm` funcionando com auth JWT real (`app/auth.py`,
-  `SUPABASE_JWT_SECRET`) e Supabase Storage (bucket `receipts`, privado —
-  **pré-requisito manual**: criar o bucket no painel antes de rodar a
-  migration `0002_storage_receipts_policies.sql`). Processamento roda em
+  /receipts/{id}/confirm` funcionando com auth JWT real via JWKS
+  (`app/auth.py`, ES256) e Supabase Storage (bucket `receipts`, privado — já
+  criado, migration `0002_storage_receipts_policies.sql` já aplicada).
+  Processamento roda em
   FastAPI `BackgroundTasks` (sem fila/Redis nesta fase). `confirm_receipt` usa
   update condicional (`is_ matched_transaction_id null`) pra evitar duplicar
   transaction em double-tap. Todas as chamadas ao Supabase (síncrono) rodam

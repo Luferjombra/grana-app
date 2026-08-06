@@ -7,7 +7,6 @@ class Settings(BaseSettings):
     database_url: str = ""
     supabase_url: str = ""
     supabase_service_key: str = ""
-    supabase_jwt_secret: str = ""
 
     mindee_api_key: str = ""
     receipt_ocr_provider: str = "mock"

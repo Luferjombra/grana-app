@@ -86,6 +86,14 @@ No projeto já provisionado, aplicar também as migrations incrementais em
    no painel do Supabase (Storage -> New bucket) marcado como **privado**
    antes de rodar esta migration.
 
+## Autenticação (backend)
+
+O backend valida o JWT do Supabase Auth contra o JWKS público do projeto
+(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), porque este projeto assina
+com chave assimétrica (ES256, em Settings -> JWT Keys) — não existe
+`SUPABASE_JWT_SECRET` pra configurar, e a rotação de chave é acompanhada
+automaticamente. Tokens HS256 são rejeitados de propósito.
+
 ## Variáveis de ambiente por app
 
 | App | Arquivo | Variáveis |
