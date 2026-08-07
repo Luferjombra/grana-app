@@ -219,6 +219,17 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   data/comerciante/parcelas em pills. O seletor de data precisa de tratamento
   por plataforma: no iOS é inline e dispara `onChange` a cada giro, então só o
   Android fecha sozinho.
+- ✅ **Home real + navegação por abas.** `app/(app)/(tabs)/` com Início
+  (consome `/dashboard/summary`: fluxo de caixa, 50-30-20 com barras, health
+  score, gasto por categoria) e Atividade (`/transactions` agrupado por dia,
+  com "carregar mais" usando o cursor). `adicionar` e `notificacoes` são telas
+  empilhadas, não abas. Insights e Metas **não** viraram abas ainda: sem os
+  endpoints, seriam abas vazias prometendo o que o app não faz.
+  - Cada chamada da Home é independente, **não** use `Promise.all` aqui: com
+    ele, uma falha isolada (ex: `/notifications` sem a migration 0003) apagava
+    saldo, buckets e health score junto.
+  - Distribuição por categoria saiu como barras, não donut: o donut exigiria
+    `react-native-svg` e matemática de arco. Trocar depois é local.
 - ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
 - ⏳ Spec 08 (push) — não iniciada.
 
@@ -234,8 +245,8 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
 3. Tela mobile do fluxo de recibo (upload de foto, confirmação dos campos
    extraídos) — o backend já está pronto, falta a UI que consome
    `POST /receipts` → poll `GET /receipts/{id}` → `POST /receipts/{id}/confirm`.
-4. Home de verdade consumindo `/dashboard/summary` (hoje só mostra o card de
-   onboarding e a renda do mês) + navegação entre as abas do protótipo.
+4. Endpoints de insights, reserva de emergência e gamificação — só depois
+   deles as abas Insights e Metas fazem sentido.
 5. Push notifications — nasce o projeto Expo/EAS (spec 08).
 
 ## Como o usuário prefere trabalhar

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth-context';
@@ -61,7 +61,15 @@ export default function AppLayout() {
     );
   }
 
-  return <Slot />;
+  // As abas ficam dentro deste Stack; adicionar e notificações são empurradas
+  // por cima delas, não são abas.
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="adicionar" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="notificacoes" />
+    </Stack>
+  );
 }
 
 const styles = StyleSheet.create({

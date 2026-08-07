@@ -1,4 +1,11 @@
-import { formatShortDate, isToday, toIsoDate } from './dates';
+import {
+  currentMonth,
+  dayGroupLabel,
+  formatShortDate,
+  isToday,
+  monthName,
+  toIsoDate,
+} from './dates';
 
 describe('toIsoDate', () => {
   it('formata no padrão que a API espera', () => {
@@ -36,5 +43,49 @@ describe('isToday', () => {
 describe('formatShortDate', () => {
   it('mostra dia e mês na ordem brasileira', () => {
     expect(formatShortDate(new Date(2026, 7, 5))).toBe('05/08');
+  });
+});
+
+describe('currentMonth', () => {
+  it('devolve YYYY-MM, o formato do filtro da API', () => {
+    expect(currentMonth(new Date(2026, 7, 15))).toBe('2026-08');
+  });
+
+  it('usa o mês local mesmo no último dia à noite', () => {
+    expect(currentMonth(new Date(2026, 7, 31, 23, 30))).toBe('2026-08');
+  });
+});
+
+describe('monthName', () => {
+  it('traduz o mês pro cabeçalho', () => {
+    expect(monthName('2026-08')).toBe('Agosto');
+    expect(monthName('2026-01')).toBe('Janeiro');
+    expect(monthName('2026-12')).toBe('Dezembro');
+  });
+
+  it('devolve a entrada quando o mês não faz sentido, sem quebrar a tela', () => {
+    expect(monthName('2026-13')).toBe('2026-13');
+    expect(monthName('lixo')).toBe('lixo');
+  });
+});
+
+describe('dayGroupLabel', () => {
+  const today = new Date(2026, 7, 5);
+
+  it('reconhece hoje e ontem', () => {
+    expect(dayGroupLabel('2026-08-05', today)).toBe('Hoje');
+    expect(dayGroupLabel('2026-08-04', today)).toBe('Ontem');
+  });
+
+  it('mostra dia/mês nos demais', () => {
+    expect(dayGroupLabel('2026-07-28', today)).toBe('28/07');
+  });
+
+  it('acha o ontem certo virando o mês', () => {
+    expect(dayGroupLabel('2026-07-31', new Date(2026, 7, 1))).toBe('Ontem');
+  });
+
+  it('acha o ontem certo virando o ano', () => {
+    expect(dayGroupLabel('2025-12-31', new Date(2026, 0, 1))).toBe('Ontem');
   });
 });
