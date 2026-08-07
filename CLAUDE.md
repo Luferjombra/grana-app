@@ -230,6 +230,25 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     saldo, buckets e health score junto.
   - Distribuição por categoria saiu como barras, não donut: o donut exigiria
     `react-native-svg` e matemática de arco. Trocar depois é local.
+- ✅ **Tela de recibo** (`app/(app)/recibo.tsx`) — fecha a spec 05 ponta a
+  ponta: foto/galeria → `POST /receipts` (multipart via `authorizedFetch`, que
+  não impõe Content-Type pro fetch gerar o boundary) → poll de
+  `GET /receipts/{id}` (1,5s, teto de 20 tentativas) → revisão dos campos →
+  `POST /receipts/{id}/confirm`.
+  - **Falha no poll não volta pra tela de foto**: a imagem já subiu e o OCR já
+    rodou, então mandar refotografar duplicaria o recibo e gastaria outro
+    crédito do Mindee (são 200 no plano). Cai na revisão manual.
+  - Campos com confiança baixa vêm `null` (specs/05) e o usuário preenche —
+    o app não chuta valor.
+  - `ReceiptConfirm` **não tem** campos de parcelamento de propósito: parcelar
+    exige gerar N transações (ver `transactions/service.py`), e aceitar o
+    total sem expandir repetiria o bug de perder as parcelas seguintes.
+  - Valor do OCR passa por `numberToCents`, que arredonda: `19.99 * 100` dá
+    1998.9999… em ponto flutuante e truncar tiraria um centavo.
+  - `jest.setup.js` mocka o AsyncStorage — sem módulo nativo ele derruba o
+    processo de teste assim que o Supabase tenta restaurar a sessão.
+  - App renomeado de "mobile" pra **Grana** (`app.json`), antes de o EAS
+    existir e amarrar o slug.
 - ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
 - ⏳ Spec 08 (push) — não iniciada.
 

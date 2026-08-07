@@ -15,6 +15,23 @@ export function isToday(date: Date): boolean {
   return toIsoDate(date) === toIsoDate(new Date());
 }
 
+/**
+ * '2026-08-05' -> Date local, ou null se a string não for uma data.
+ * `new Date('2026-08-05')` interpretaria como UTC e, em fuso negativo,
+ * voltaria o dia 4 — por isso monta a data pelos componentes.
+ */
+export function parseIsoDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const [, year, month, day] = match.map(Number);
+  const parsed = new Date(year, month - 1, day);
+
+  // Rejeita data que "existe" só por overflow, tipo 2026-02-31 virando março.
+  if (parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
+  return parsed;
+}
+
 /** '05/08', para a pill de data quando não é hoje. */
 export function formatShortDate(date: Date): string {
   const [, month, day] = toIsoDate(date).split('-');

@@ -4,6 +4,7 @@ import {
   formatShortDate,
   isToday,
   monthName,
+  parseIsoDate,
   toIsoDate,
 } from './dates';
 
@@ -43,6 +44,32 @@ describe('isToday', () => {
 describe('formatShortDate', () => {
   it('mostra dia e mês na ordem brasileira', () => {
     expect(formatShortDate(new Date(2026, 7, 5))).toBe('05/08');
+  });
+});
+
+describe('parseIsoDate', () => {
+  it('lê a data do OCR como data local', () => {
+    // new Date('2026-08-05') seria UTC e, em fuso negativo, voltaria pro dia 4.
+    const parsed = parseIsoDate('2026-08-05');
+    expect(parsed && toIsoDate(parsed)).toBe('2026-08-05');
+  });
+
+  it('rejeita formato que não é ISO', () => {
+    expect(parseIsoDate('05/08/2026')).toBeNull();
+    expect(parseIsoDate('2026-8-5')).toBeNull();
+    expect(parseIsoDate('')).toBeNull();
+    expect(parseIsoDate('ontem')).toBeNull();
+  });
+
+  it('rejeita data que só existe por overflow', () => {
+    // 31 de fevereiro viraria 3 de março silenciosamente.
+    expect(parseIsoDate('2026-02-31')).toBeNull();
+    expect(parseIsoDate('2026-13-01')).toBeNull();
+  });
+
+  it('aceita 29 de fevereiro em ano bissexto', () => {
+    expect(parseIsoDate('2028-02-29')).not.toBeNull();
+    expect(parseIsoDate('2026-02-29')).toBeNull();
   });
 });
 

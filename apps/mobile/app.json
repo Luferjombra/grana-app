@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Grana",
+    "slug": "grana",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -26,7 +26,14 @@
       "expo-router",
       "expo-status-bar",
       "expo-web-browser",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O Grana usa a câmera pra ler o valor e o comerciante do seu recibo.",
+          "photosPermission": "O Grana acessa suas fotos pra ler o recibo que você escolher."
+        }
+      ]
     ]
   }
 }

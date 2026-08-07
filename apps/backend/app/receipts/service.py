@@ -157,8 +157,9 @@ async def confirm_receipt(current_user: CurrentUser, receipt_id: int, data: Rece
             "note": data.note,
             "entry_method": "receipt_ocr",
             "receipt_id": receipt_id,
-            "installment_number": data.installment_number,
-            "installment_total": data.installment_total,
+            # Recibo não parcela hoje — ver a nota em ReceiptConfirm.
+            "installment_number": None,
+            "installment_total": None,
         }
     )
     transaction_result = await asyncio.to_thread(insert_query.execute)

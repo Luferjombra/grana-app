@@ -118,6 +118,12 @@ export default function Adicionar() {
 
       <Text style={styles.amount}>R$ {formatCents(cents) || '0,00'}</Text>
 
+      {type === 'expense' ? (
+        <Pressable style={styles.scan} onPress={() => router.replace('/(app)/recibo')}>
+          <Text style={styles.scanText}>Escanear recibo</Text>
+        </Pressable>
+      ) : null}
+
       {showsCategories ? (
         <>
           <Text style={styles.label}>
@@ -309,6 +315,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 30,
     fontWeight: '500',
+  },
+  scan: {
+    backgroundColor: '#1c2028',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  scanText: {
+    fontSize: 12,
+    color: '#eef0f3',
   },
   label: {
     fontSize: 11,

@@ -4,6 +4,7 @@ import {
   formatApiAmount,
   formatCents,
   isPositiveAmount,
+  numberToCents,
 } from './money';
 
 describe('extractDigits', () => {
@@ -78,6 +79,33 @@ describe('isPositiveAmount', () => {
     expect(isPositiveAmount('')).toBe(false);
     expect(isPositiveAmount('0')).toBe(false);
     expect(isPositiveAmount('000')).toBe(false);
+  });
+});
+
+describe('numberToCents', () => {
+  it('converte o valor lido pelo OCR pro campo de moeda', () => {
+    expect(numberToCents(42.5)).toBe('4250');
+    expect(numberToCents(8)).toBe('800');
+  });
+
+  it('arredonda em vez de truncar o erro de ponto flutuante', () => {
+    // 19.99 * 100 dá 1998.9999999999998; truncar viraria R$ 19,98,
+    // um centavo a menos que o recibo.
+    expect(numberToCents(19.99)).toBe('1999');
+    expect(numberToCents(1.1)).toBe('110');
+    expect(numberToCents(80.7)).toBe('8070');
+  });
+
+  it('trata valor ausente ou inválido como campo vazio', () => {
+    expect(numberToCents(0)).toBe('');
+    expect(numberToCents(-5)).toBe('');
+    expect(numberToCents(NaN)).toBe('');
+    expect(numberToCents(Infinity)).toBe('');
+  });
+
+  it('sobrevive à ida e volta pelo formato da API', () => {
+    expect(centsToApiAmount(numberToCents(19.99))).toBe('19.99');
+    expect(centsToApiAmount(numberToCents(1234.56))).toBe('1234.56');
   });
 });
 

@@ -2,7 +2,12 @@ import { supabase } from './supabase';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL as string;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * fetch autenticado sem impor Content-Type — usado pelo upload multipart, em
+ * que o próprio fetch precisa gerar o boundary. Definir o header à mão ali
+ * quebraria o parse do arquivo no servidor.
+ */
+export async function authorizedFetch(path: string, init?: RequestInit): Promise<Response> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -10,7 +15,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
       ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
       ...init?.headers,
     },
@@ -20,6 +24,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API error ${response.status}: ${await response.text()}`);
   }
 
+  return response;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await authorizedFetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+  });
   return response.json() as Promise<T>;
 }
 

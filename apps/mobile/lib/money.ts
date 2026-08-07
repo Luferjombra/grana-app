@@ -36,6 +36,17 @@ export function isPositiveAmount(digits: string): boolean {
   return /[1-9]/.test(digits);
 }
 
+/**
+ * 42.5 -> '4250', para preencher o campo de moeda com o valor lido pelo OCR.
+ *
+ * Arredonda de propósito: `19.99 * 100` dá 1998.9999999999998 em ponto
+ * flutuante, e truncar viraria R$ 19,98 — um centavo a menos que o recibo.
+ */
+export function numberToCents(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '';
+  return String(Math.round(value * 100));
+}
+
 /** '8000.00' -> 'R$ 8.000,00', para exibir valores vindos da API. */
 export function formatApiAmount(amount: string): string {
   const [whole = '0', cents = '00'] = amount.split('.');
