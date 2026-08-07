@@ -1,5 +1,13 @@
 # Spec: adaptador de Open Finance (Pluggy)
 
+> ## ⛔ ADIADA — não implementar
+>
+> Barreira regulatória: só instituição autorizada pelo BCB pode receber dados
+> no Open Finance, e o BCB propôs restringir a rota de parceria que a Pluggy
+> oferecia a empresas não autorizadas. Ver
+> `docs/adr/0001-open-finance-adiado.md` antes de retomar qualquer coisa deste
+> arquivo. O conteúdo abaixo fica como referência de desenho, não como plano.
+
 ## Interface (`apps/backend/app/providers/bank_aggregator/base.py`)
 
 ```python

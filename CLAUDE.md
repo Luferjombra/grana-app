@@ -10,8 +10,12 @@ App mobile de controle financeiro pessoal. O usuário informa o salário do mês
 o app mostra onde ele está gastando mais por categoria, aplica a regra
 50-30-20 (necessidades/desejos/poupança) com gamificação pra ele bater as
 metas, calcula uma reserva de emergência automática, e facilita o registro de
-gastos por três vias: importação de extrato (CSV/OFX), foto de recibo (OCR) e
-conexão bancária via Open Finance.
+gastos por **duas** vias: lançamento manual e foto de recibo (OCR), com
+importação de extrato (CSV/OFX) como a ponte com o banco.
+
+> A terceira via planejada, conexão bancária via Open Finance, foi **adiada por
+> barreira regulatória** — ver `docs/adr/0001-open-finance-adiado.md`. Não
+> reintroduzir na descrição do produto sem revisitar aquela ADR.
 
 ## Stack decidida (não reabrir)
 
@@ -19,7 +23,8 @@ conexão bancária via Open Finance.
 - **Backend**: FastAPI (Python)
 - **Banco/infra**: Supabase (Postgres + Auth + Storage)
 - **OCR de recibo**: Mindee, atrás de uma interface `ReceiptOcrProvider`
-- **Open Finance**: Pluggy, atrás de uma interface `BankAggregatorProvider`
+- **Open Finance**: Pluggy, atrás de uma interface `BankAggregatorProvider` —
+  **adiado**, ver `docs/adr/0001-open-finance-adiado.md`
 - **Repositório**: monorepo (`apps/mobile`, `apps/backend`, `etl/`)
 - **Jobs agendados**: híbrido evento + cron diário (GitHub Actions ou Supabase Edge Functions)
 
@@ -155,8 +160,27 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   - `GET /categories` criado (a spec 09 não previu, mas a tela precisa):
     padrão do sistema + as do household, ordenadas na sequência 50-30-20.
   - Ainda **stubs** (`NotImplementedError`): insights, reserva de emergência,
-    gamificação, `POST /push-tokens` (precisa de tabela que não existe),
-    `POST /transactions/import` (CSV/OFX).
+    gamificação, `POST /push-tokens` (precisa de tabela que não existe).
+- ✅ **Import de extrato CSV/OFX** (`app/imports/`, spec nova `specs/11`) —
+  virou a única ponte com o banco depois que Open Finance foi adiado.
+  - Duas etapas: `POST /transactions/import` (multipart) devolve preview **sem
+    gravar nada**, e `POST /transactions/import/confirm` grava as linhas que o
+    usuário confirmou, cada uma com categoria. Preview é **stateless** — o
+    cliente devolve as linhas, e o backend revalida tudo.
+  - `parse_amount` decide o separador decimal contando dígitos: `1.234` em
+    extrato é mil duzentos e trinta e quatro, não 1,234 — errar isso multiplica
+    o valor por mil. `parse_date` cobre dd/mm/aaaa, ISO e o aaaammdd do OFX.
+  - Dedupe: OFX tem `FITID` → `external_transaction_id` (`ofx:<id>`), bloqueado
+    pela migration 0004. CSV não tem id, então duplicata é **avisada** no
+    preview, nunca bloqueada — dois cafés iguais no mesmo dia são legítimos.
+  - **Não usar `upsert` com `on_conflict` aqui**: o índice de dedupe é parcial e
+    o Postgres não infere índice parcial de lista de colunas — `ON CONFLICT
+    (cols)` falha a requisição inteira. O service filtra o que já existe antes
+    e faz insert simples. A dedupe também roda **dentro do arquivo**, porque
+    extrato com período sobreposto repete FITID.
+  - `imports_router` é registrado **antes** de `transactions_router` no
+    `main.py`: `/transactions/import` é caminho literal e precisa ganhar de
+    `/transactions/{transaction_id}`.
 - ✅ **Spec 07 (motor de projeção/notificação)** — `app/notifications/engine.py`
   é a regra única, chamada pelo gatilho de evento (BackgroundTasks após
   create/update/**delete** de transaction) e pelo cron
@@ -249,7 +273,17 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     processo de teste assim que o Supabase tenta restaurar a sessão.
   - App renomeado de "mobile" pra **Grana** (`app.json`), antes de o EAS
     existir e amarrar o slug.
-- ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
+- 🛑 **Spec 06 (Open Finance/Pluggy) — ADIADA por barreira regulatória.**
+  Ver `docs/adr/0001-open-finance-adiado.md`. Resumo: só instituição autorizada
+  pelo BCB pode receber dados no Open Finance, e em março/2026 o BCB propôs
+  restringir justamente a rota de parceria que a Pluggy oferecia a empresas não
+  autorizadas (figuras de "instituição integradora" e "entidade parceira",
+  modelo 1x1x1, capital de ITP de R$ 1 mi → R$ 17 mi). **Não implementar
+  `PluggyProvider` nem `/accounts`.** O código fica dormente de propósito
+  (interface, `MockProvider`, `etl/pluggy_sync.py`, tabela `accounts`,
+  variáveis no `.env.example`) — custo zero e destrava rápido se a regra mudar.
+  - Consequência: **o produto tem duas vias de registro, não três**, e o
+    **import CSV/OFX virou a única ponte com o banco** — deixou de ser extra.
 - ⏳ Spec 08 (push) — não iniciada.
 
 ## Próximos passos sugeridos (retomar por aqui)

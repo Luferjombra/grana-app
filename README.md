@@ -88,6 +88,10 @@ No projeto já provisionado, aplicar também as migrations incrementais em
 3. `0003_notifications_dedupe.sql` — `reference_month`/`subject` em
    `notifications` + índice único parcial de idempotência (specs/07). Sem ela
    o motor de alertas falha em todo insert.
+4. `0004_transactions_external_id_dedupe.sql` — índice único por household em
+   `external_transaction_id` (specs/11). Sem ela, reimportar o mesmo extrato
+   duplica tudo: o `unique (account_id, external_transaction_id)` original não
+   protege import, porque `account_id` fica nulo e nulos são distintos.
 
 ## Autenticação (backend)
 

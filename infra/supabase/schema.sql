@@ -145,6 +145,13 @@ create table transactions (
 create index idx_transactions_household_month on transactions (household_id, occurred_at);
 create index idx_transactions_category on transactions (category_id);
 
+-- O unique (account_id, external_transaction_id) acima não protege import de
+-- extrato: sem conta, account_id é null, e nulos são distintos no Postgres.
+-- Este índice fecha isso por household (specs/11).
+create unique index transactions_household_external_id
+  on transactions (household_id, external_transaction_id)
+  where external_transaction_id is not null;
+
 -- ----------------------------------------------------------------------------
 -- 4. RECIBOS (OCR)
 -- ----------------------------------------------------------------------------
