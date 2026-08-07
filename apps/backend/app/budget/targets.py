@@ -53,26 +53,43 @@ async def get_budget_rule(household_id: int) -> dict:
     return result.data
 
 
-async def get_month_income(household_id: int, month_start: date) -> Decimal:
-    """Renda do mês = soma de incomes de todos os membros do household.
-    incomes é escopado por user_id, então precisa resolver os membros antes."""
-    db = get_db()
+async def household_member_ids(household_id: int) -> list[str]:
+    query = get_db().table("household_members").select("user_id").eq("household_id", household_id)
+    result = await asyncio.to_thread(query.execute)
+    return [row["user_id"] for row in (result.data or [])]
 
-    members_query = db.table("household_members").select("user_id").eq("household_id", household_id)
-    members_result = await asyncio.to_thread(members_query.execute)
-    user_ids = [row["user_id"] for row in (members_result.data or [])]
+
+async def get_month_income(household_id: int, month_start: date) -> Decimal:
+    """Renda vigente no mês, somada entre os membros do household.
+
+    Cada linha de `incomes` é uma declaração "a partir deste mês, minha renda
+    é X" (specs/10) — então vale a declaração mais recente com
+    effective_month <= mês consultado, e não a de igualdade exata. Sem isso o
+    app zeraria as metas todo dia 1 até o usuário recadastrar o salário.
+    """
+    user_ids = await household_member_ids(household_id)
     if not user_ids:
         return Decimal("0")
 
     incomes_query = (
-        db.table("incomes")
-        .select("amount")
+        get_db()
+        .table("incomes")
+        .select("user_id, source, amount, effective_month")
         .in_("user_id", user_ids)
-        .eq("effective_month", month_start.isoformat())
+        .lte("effective_month", month_start.isoformat())
+        .order("effective_month", desc=True)
     )
     incomes_result = await asyncio.to_thread(incomes_query.execute)
 
-    return sum((to_decimal(row["amount"]) for row in (incomes_result.data or [])), Decimal("0"))
+    # Uma renda vigente por (usuário, fonte): a primeira que aparece já é a
+    # mais recente, porque a query vem ordenada por mês decrescente.
+    current: dict[tuple[str, str], Decimal] = {}
+    for row in incomes_result.data or []:
+        key = (row["user_id"], row.get("source") or "salario")
+        if key not in current:
+            current[key] = to_decimal(row["amount"])
+
+    return sum(current.values(), Decimal("0"))
 
 
 async def ensure_month_targets(household_id: int, month_start: date) -> dict[str, Decimal]:

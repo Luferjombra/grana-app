@@ -18,6 +18,10 @@ function RootNavigator() {
       </Stack.Protected>
       <Stack.Protected guard={!passwordRecoveryPending && !!session}>
         <Stack.Screen name="(app)" />
+        {/* Onboarding de dados é pulável (specs/10), então fica no mesmo
+            grupo autenticado em vez de barrar a entrada no app. */}
+        <Stack.Screen name="(onboarding)/perfil" />
+        <Stack.Screen name="(onboarding)/renda" />
       </Stack.Protected>
       <Stack.Protected guard={!passwordRecoveryPending && !session}>
         <Stack.Screen name="(auth)/cadastro" />

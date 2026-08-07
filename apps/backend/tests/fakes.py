@@ -68,6 +68,10 @@ class FakeQuery:
         self._q.filters[f"{key}__lt"] = value
         return self
 
+    def lte(self, key, value):
+        self._q.filters[f"{key}__lte"] = value
+        return self
+
     def is_(self, key, value):
         assert value == "null", "fake só suporta is_(key, 'null')"
         self._q.filters[f"{key}__isnull"] = True
@@ -153,6 +157,9 @@ def _matches(row: dict, filters: dict) -> bool:
                 return False
         elif key.endswith("__gte"):
             if str(row.get(key[:-5])) < str(expected):
+                return False
+        elif key.endswith("__lte"):
+            if str(row.get(key[:-5])) > str(expected):
                 return False
         elif key.endswith("__lt"):
             if str(row.get(key[:-4])) >= str(expected):

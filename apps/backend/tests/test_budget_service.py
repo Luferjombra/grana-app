@@ -227,7 +227,9 @@ async def test_summary_sums_income_across_household_members(monkeypatch):
     assert buckets["necessidades"]["target"] == "4000.00"
 
 
-async def test_summary_ignores_income_from_another_month(monkeypatch):
+async def test_income_carries_forward_to_later_months(monkeypatch):
+    """Renda declarada é 'a partir deste mês' (specs/10) — senão o app zeraria
+    as metas todo dia 1 até o usuário recadastrar o salário."""
     install_db(
         monkeypatch,
         FakeDb(
@@ -239,8 +241,77 @@ async def test_summary_ignores_income_from_another_month(monkeypatch):
     )
 
     summary = await service.get_dashboard_summary(USER, "2026-08")
+    buckets = {b["bucket"]: b for b in summary["buckets"]}
+
+    assert buckets["necessidades"]["target"] == "4000.00"
+
+
+async def test_a_future_income_declaration_does_not_apply_retroactively(monkeypatch):
+    install_db(
+        monkeypatch,
+        FakeDb(
+            base_tables(
+                [],
+                incomes=[{"user_id": "user-1", "amount": "8000", "effective_month": "2026-09-01"}],
+            )
+        ),
+    )
+
+    summary = await service.get_dashboard_summary(USER, "2026-08")
 
     assert summary["health_score"] is None
+
+
+async def test_most_recent_declaration_wins(monkeypatch):
+    install_db(
+        monkeypatch,
+        FakeDb(
+            base_tables(
+                [],
+                incomes=[
+                    {"user_id": "user-1", "amount": "8000", "effective_month": "2026-06-01"},
+                    {"user_id": "user-1", "amount": "10000", "effective_month": "2026-07-01"},
+                ],
+            )
+        ),
+    )
+
+    summary = await service.get_dashboard_summary(USER, "2026-08")
+    buckets = {b["bucket"]: b for b in summary["buckets"]}
+
+    # 50% de 10000 (a declaração de julho), não de 8000 nem da soma das duas.
+    assert buckets["necessidades"]["target"] == "5000.00"
+
+
+async def test_different_income_sources_are_summed(monkeypatch):
+    install_db(
+        monkeypatch,
+        FakeDb(
+            base_tables(
+                [],
+                incomes=[
+                    {
+                        "user_id": "user-1",
+                        "amount": "6000",
+                        "effective_month": "2026-07-01",
+                        "source": "salario",
+                    },
+                    {
+                        "user_id": "user-1",
+                        "amount": "2000",
+                        "effective_month": "2026-06-01",
+                        "source": "freelance",
+                    },
+                ],
+            )
+        ),
+    )
+
+    summary = await service.get_dashboard_summary(USER, "2026-08")
+    buckets = {b["bucket"]: b for b in summary["buckets"]}
+
+    # Fontes distintas somam (6000 + 2000), cada uma com sua vigência.
+    assert buckets["necessidades"]["target"] == "4000.00"
 
 
 async def test_summary_rejects_invalid_month(monkeypatch):

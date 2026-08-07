@@ -169,6 +169,31 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     que nada ainda escreve — entra junto com o endpoint da reserva.
   - O cron importa `app.notifications.engine`, então o job precisa do pacote
     `grana-backend` instalado junto (o workflow já faz).
+- ✅ **Spec 10 (onboarding de dados) — nova, escrita nesta leva.** Fecha a
+  lacuna que a spec 04 deixou. Era o que destravava tudo: nada escrevia em
+  `incomes`, então metas, health score e alertas ficavam todos dormentes.
+  - **Renda é declaração com vigência**, não valor por mês: uma linha de
+    `incomes` significa "a partir deste mês, minha renda é X", e vale até uma
+    declaração mais nova. `get_month_income` pega a vigente por
+    `(user_id, source)` — **não filtrar por igualdade de mês**, senão o app
+    zera as metas todo dia 1.
+  - Ao declarar renda nova, `budget_targets` é apagado **do mês em diante**
+    (não só o mês), porque a renda vale dali pra frente e
+    `ensure_month_targets` não sobrescreve o que já existe.
+  - Onboarding é **pulável**; a Home mostra card "informe sua renda" enquanto
+    `onboarding_complete` for false (derivado de ter renda vigente > 0).
+  - `complete_onboarding` grava a renda **por último** de propósito: como
+    `onboarding_complete` deriva dela, falha em passo anterior mantém o
+    usuário pendente e o traz de volta, em vez de deixá-lo "concluído" e sem
+    reserva pra sempre.
+  - Reserva criada com baseline estimado (renda × % de necessidades), não
+    perguntado. Multiplicador 6 (clt) / 12 (autônomo).
+  - Endpoints novos: `GET /profile`, `POST /onboarding`, `GET|POST /incomes`.
+  - Mobile: `app/(onboarding)/perfil.tsx` e `renda.tsx`. Campo de moeda guarda
+    **centavos como dígitos** (`lib/money.ts`), nunca float — enviar
+    `"8.000,00"` pro backend viraria erro de conversão.
+  - **Jest configurado** no mobile (`npm test`, preset `jest-expo`) — a spec 01
+    previa e faltava. Já no CI.
 - ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
 - ⏳ Spec 08 (push) — não iniciada.
 
@@ -181,13 +206,12 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
 2. Implementar o resto dos endpoints do contrato da API (spec 09) — faltam
    insights, reserva de emergência, gamificação, notificações e o import
    CSV/OFX; `receipts`, `transactions` e `dashboard` já são reais.
-3. Telas de onboarding de dados (perfil CLT/autônomo, salário do mês) — hoje
-   o pós-cadastro cai direto no dashboard vazio, essas telas ainda não têm spec.
-4. Job de projeção/notificação (spec 07).
-5. Push notifications — nasce o projeto Expo/EAS (spec 08).
-6. Tela mobile do fluxo de recibo (upload de foto, confirmação dos campos
+3. Tela mobile do fluxo de recibo (upload de foto, confirmação dos campos
    extraídos) — o backend já está pronto, falta a UI que consome
    `POST /receipts` → poll `GET /receipts/{id}` → `POST /receipts/{id}/confirm`.
+4. Home de verdade consumindo `/dashboard/summary` (hoje só mostra o card de
+   onboarding e a renda do mês) + navegação entre as abas do protótipo.
+5. Push notifications — nasce o projeto Expo/EAS (spec 08).
 
 ## Como o usuário prefere trabalhar
 

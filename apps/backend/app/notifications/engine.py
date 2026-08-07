@@ -187,9 +187,7 @@ async def evaluate_month(
 async def _household_member_ids(household_id: int) -> list[str]:
     """O orçamento é do household, então o alerta vai pra todos os membros —
     hoje sempre 1, mas a modelagem já é compartilhada."""
-    query = get_db().table("household_members").select("user_id").eq("household_id", household_id)
-    result = await asyncio.to_thread(query.execute)
-    return [row["user_id"] for row in (result.data or [])]
+    return await targets_module.household_member_ids(household_id)
 
 
 # Tipos que este caminho de avaliação é dono e pode retirar. goal_hit fica
