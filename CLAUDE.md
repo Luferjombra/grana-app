@@ -122,8 +122,29 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   transaction em double-tap. Todas as chamadas ao Supabase (síncrono) rodam
   via `asyncio.to_thread` pra não bloquear o event loop — seguir esse padrão
   em qualquer endpoint novo que use `get_db()`.
+- 🟡 **Spec 09 (contrato da API) — transactions + dashboard prontos.**
+  `GET/POST/PATCH/DELETE /transactions` (paginação keyset por `(occurred_at, id)`,
+  filtros month/category_id/type) e `/dashboard/summary` + `/dashboard/budget-rule`
+  implementados de verdade. Decisões tomadas nesta leva:
+  - **Health score** (`app/budget/health.py`): média das notas por bucket
+    ponderada pelos percentuais 50-30-20 vigentes do household. Necessidades/
+    desejos são teto (dentro = 100; cada 1% de estouro tira 1 ponto, dobro do
+    teto zera); poupança é meta (proporcional ao atingido). Faixas: ≥80
+    `saudavel`, ≥60 `atencao`, senão `risco`. Retorna `null` sem renda no mês.
+    O `78` do protótipo é número inventado de mockup, não bate com a fórmula.
+  - **budget_targets** é gerado sob demanda e persistido a partir de
+    renda × budget_rules (`app/budget/targets.py::ensure_month_targets`) —
+    **a spec 07 deve reusar essa função**, não reimplementar. Não sobrescreve
+    target existente (o schema prevê override manual).
+  - `aggregate_month()` é pura e compartilhada dashboard ↔ motor da spec 07.
+  - Despesa **exige** `category_id`: sem categoria ela não cai em bucket e
+    escaparia da regra 50-30-20. Gasto de categoria apagada (`on delete set
+    null`) aparece em `uncategorized_expense`, nunca sumindo em silêncio.
+  - Valores monetários sempre string decimal; nunca float (specs/09).
+  - Ainda **stubs** (`NotImplementedError`): insights, reserva de emergência,
+    gamificação, notificações, `POST /transactions/import` (CSV/OFX).
 - ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
-- ⏳ Specs 07, 08, 09 (fora do que já existe pra recibos) — não iniciadas.
+- ⏳ Specs 07, 08 — não iniciadas.
 
 ## Próximos passos sugeridos (retomar por aqui)
 
@@ -131,9 +152,9 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
    de contas (`/accounts/connect-token`, `/accounts/callback`, etc.) — hoje só
    existe `MockProvider` (spec 06). Decidir como o Pluggy Connect (widget web)
    vai rodar dentro do app Expo (WebView vs SDK nativo) antes de codar.
-2. Implementar o resto dos endpoints do contrato da API — hoje só
-   `receipts/*` é real, o restante (`transactions`, `budget`, `gamification`,
-   `notifications`) ainda são stubs com `NotImplementedError` (spec 09).
+2. Implementar o resto dos endpoints do contrato da API (spec 09) — faltam
+   insights, reserva de emergência, gamificação, notificações e o import
+   CSV/OFX; `receipts`, `transactions` e `dashboard` já são reais.
 3. Telas de onboarding de dados (perfil CLT/autônomo, salário do mês) — hoje
    o pós-cadastro cai direto no dashboard vazio, essas telas ainda não têm spec.
 4. Job de projeção/notificação (spec 07).
