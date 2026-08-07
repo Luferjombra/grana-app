@@ -44,18 +44,21 @@ def test_income_does_not_require_a_category():
     assert transaction.category_id is None
 
 
-def test_transaction_rejects_partial_installments():
+def test_transaction_ignores_installment_number_from_the_client():
+    """Só o total é aceito: o número de cada parcela é atribuído pelo backend
+    ao gerar a série. Aceitar do cliente permitiria criar parcela solta."""
+    transaction = make_transaction(installment_number=7, installment_total=3)
+    assert not hasattr(transaction, "installment_number")
+    assert transaction.installment_total == 3
+
+
+def test_transaction_rejects_zero_installments():
     with pytest.raises(ValidationError):
-        make_transaction(installment_number=2)
+        make_transaction(installment_total=0)
 
 
-def test_transaction_rejects_installment_number_above_total():
-    with pytest.raises(ValidationError):
-        make_transaction(installment_number=5, installment_total=3)
-
-
-def test_transaction_accepts_coherent_installments():
-    transaction = make_transaction(installment_number=2, installment_total=12)
+def test_transaction_accepts_installment_total():
+    transaction = make_transaction(installment_total=12)
     assert transaction.installment_total == 12
 
 

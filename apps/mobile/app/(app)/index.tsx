@@ -47,6 +47,10 @@ export default function Home() {
           <Text style={styles.summaryValue}>{formatApiAmount(profile.current_income)}</Text>
         </View>
       ) : null}
+
+      <Pressable style={styles.addButton} onPress={() => router.push('/(app)/adicionar')}>
+        <Text style={styles.addButtonText}>Adicionar lançamento</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -91,6 +95,18 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: 24,
+    fontWeight: '500',
+  },
+  addButton: {
+    backgroundColor: '#e8a33d',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  addButtonText: {
+    color: '#2a1c04',
+    fontSize: 14,
     fontWeight: '500',
   },
 });

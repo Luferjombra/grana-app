@@ -4,6 +4,10 @@ from pydantic import BaseModel, field_validator, model_validator
 
 TRANSACTION_TYPES = ("expense", "income", "transfer")
 
+# Teto do parcelamento — cada parcela vira uma linha, então um número solto
+# aqui viraria centenas de transações num único POST.
+MAX_INSTALLMENTS = 12
+
 
 class TransactionCreate(BaseModel):
     amount: Decimal
@@ -15,7 +19,10 @@ class TransactionCreate(BaseModel):
     occurred_at: str
     merchant: str | None = None
     note: str | None = None
-    installment_number: int | None = None
+    # Só o total de parcelas é informado: o `amount` é o valor **cheio** da
+    # compra e o backend gera uma transação por parcela, numerando-as. Aceitar
+    # installment_number aqui deixaria o cliente criar parcelas soltas, sem as
+    # irmãs — foi assim que a primeira versão perdia 11 de 12 parcelas.
     installment_total: int | None = None
 
     @field_validator("amount")
@@ -42,14 +49,15 @@ class TransactionCreate(BaseModel):
 
     @model_validator(mode="after")
     def installments_must_be_coherent(self):
-        number, total = self.installment_number, self.installment_total
-        if (number is None) != (total is None):
-            raise ValueError("Informe parcela atual e total de parcelas juntos.")
-        if number is not None:
-            if number < 1 or total < 1:
-                raise ValueError("Parcelas precisam ser maiores que zero.")
-            if number > total:
-                raise ValueError("A parcela atual não pode ser maior que o total.")
+        total = self.installment_total
+        if total is None:
+            return self
+        if total < 1:
+            raise ValueError("O total de parcelas precisa ser pelo menos 1.")
+        if total > MAX_INSTALLMENTS:
+            raise ValueError(f"No máximo {MAX_INSTALLMENTS} parcelas.")
+        if self.type != "expense":
+            raise ValueError("Só despesa pode ser parcelada.")
         return self
 
 

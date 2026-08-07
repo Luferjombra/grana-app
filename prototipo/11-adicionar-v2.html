@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adicionar (v2)</title>
+<!--
+  Revisão de 10-adicionar.html, que era um esboço incompleto. Mudanças:
+  - teclado completo (0, 00, apagar); sem vírgula, o valor preenche da direita
+  - botão salvar, desabilitado até haver valor e categoria
+  - categorias variam por tipo (despesa exige, receita opcional, transferência não tem)
+  - data / comerciante / parcelamento como pills compactas
+  - "ditar por voz" removido: não está em spec nenhuma nem na stack decidida
+-->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; padding:40px 16px; background:#2b2e33; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display:flex; justify-content:center; }
+  .frame { width:390px; background:#14171c; border-radius:28px; overflow:hidden; color:#eef0f3; border:6px solid #05070a; }
+  button { font: inherit; cursor: pointer; }
+  .seg button { flex:1; background:transparent; color:#8a8f98; border:none; border-radius:18px; padding:8px 0; font-size:12px; }
+  .seg button[aria-pressed="true"] { background:#f5f6f8; color:#14171c; }
+  .chip { background:#1c2028; color:#cfd3d9; border:none; font-size:11px; padding:6px 12px; border-radius:20px; }
+  .chip[aria-pressed="true"] { background:#e8a33d; color:#2a1c04; }
+  .keys button { background:#1c2028; color:#eef0f3; border:none; border-radius:10px; padding:12px 0; font-size:15px; }
+  #save { width:100%; background:#e8a33d; color:#2a1c04; border:none; border-radius:10px; padding:12px 0; font-size:14px; font-weight:500; }
+  #save[disabled] { opacity:.45; cursor:default; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div style="padding:1.1rem 1.1rem .5rem;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-size:13px;color:#8a8f98;">Cancelar</span>
+    <span style="font-size:15px;font-weight:500;">Novo lançamento</span>
+    <span style="width:56px;"></span>
+  </div>
+
+  <div style="padding:.25rem 1.1rem 1rem;">
+    <div class="seg" id="types" style="display:flex;background:#1c2028;border-radius:20px;padding:3px;margin-bottom:16px;">
+      <button data-type="expense" aria-pressed="true">Despesa</button>
+      <button data-type="income" aria-pressed="false">Receita</button>
+      <button data-type="transfer" aria-pressed="false">Transferência</button>
+    </div>
+
+    <p id="amount" style="text-align:center;font-size:30px;font-weight:500;margin:0 0 14px;">R$ 0,00</p>
+
+    <button style="width:100%;background:#1c2028;color:#eef0f3;border:none;border-radius:10px;padding:10px 0;font-size:12px;margin-bottom:16px;">
+      <i class="ti ti-camera" style="font-size:14px;"></i> Escanear recibo
+    </button>
+
+    <p id="catLabel" style="font-size:11px;color:#8a8f98;margin:0 0 8px;">Categoria (obrigatória)</p>
+    <div id="cats" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="chip"><i class="ti ti-calendar" style="font-size:13px;"></i> Hoje</button>
+      <button class="chip"><i class="ti ti-building-store" style="font-size:13px;"></i> Onde</button>
+      <button class="chip" id="pillInst"><i class="ti ti-credit-card" style="font-size:13px;"></i> À vista</button>
+    </div>
+
+    <div class="keys" id="keys" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:12px;"></div>
+
+    <button id="save" disabled>Salvar</button>
+    <p id="hint" style="text-align:center;font-size:11px;color:#8a8f98;margin:8px 0 0;">Informe um valor e escolha a categoria</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  var CATS = {
+    expense: ['Moradia','Mercado','Contas','Transporte','Lazer','Compras','Delivery','Streaming','Investimentos'],
+    income: ['Salário','Freelance','Outro'],
+    transfer: []
+  };
+  var type = 'expense', cents = '', cat = null, inst = 1;
+  function $(id) { return document.getElementById(id); }
+
+  function money(d) {
+    if (!d) return 'R$ 0,00';
+    var p = d.padStart(3, '0');
+    return 'R$ ' + p.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + p.slice(-2);
+  }
+
+  function renderCats() {
+    var list = CATS[type];
+    $('catLabel').textContent = list.length
+      ? (type === 'expense' ? 'Categoria (obrigatória)' : 'Categoria (opcional)')
+      : 'Transferência não usa categoria';
+    var box = $('cats');
+    box.textContent = '';
+    list.forEach(function (name) {
+      var b = document.createElement('button');
+      b.className = 'chip';
+      b.type = 'button';
+      b.textContent = name;
+      b.setAttribute('aria-pressed', cat === name ? 'true' : 'false');
+      b.onclick = function () { cat = cat === name ? null : name; renderCats(); renderState(); };
+      box.appendChild(b);
+    });
+  }
+
+  function renderState() {
+    var hasAmount = /[1-9]/.test(cents);
+    var needsCat = type === 'expense';
+    $('save').disabled = !(hasAmount && (!needsCat || cat));
+    $('hint').textContent = !hasAmount
+      ? 'Informe um valor e escolha a categoria'
+      : (needsCat && !cat ? 'Escolha uma categoria' : 'Tudo pronto');
+    $('pillInst').style.display = type === 'expense' ? '' : 'none';
+    $('amount').textContent = money(cents);
+  }
+
+  ['1','2','3','4','5','6','7','8','9','00','0','del'].forEach(function (k) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    if (k === 'del') {
+      b.innerHTML = '<i class="ti ti-backspace" style="font-size:16px;"></i>';
+      b.setAttribute('aria-label', 'Apagar');
+      b.onclick = function () { cents = cents.slice(0, -1); renderState(); };
+    } else {
+      b.textContent = k;
+      b.onclick = function () { cents = (cents + k).replace(/^0+(?=\d)/, '').slice(0, 12); renderState(); };
+    }
+    $('keys').appendChild(b);
+  });
+
+  $('types').onclick = function (e) {
+    var btn = e.target.closest('button[data-type]');
+    if (!btn) return;
+    type = btn.dataset.type;
+    cat = null;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+    });
+    renderCats();
+    renderState();
+  };
+
+  $('pillInst').onclick = function () {
+    inst = inst === 1 ? 3 : inst === 3 ? 12 : 1;
+    this.innerHTML = '<i class="ti ti-credit-card" style="font-size:13px;"></i> ' + (inst === 1 ? 'À vista' : inst + 'x');
+  };
+
+  renderCats();
+  renderState();
+})();
+</script>
+</body>
+</html>

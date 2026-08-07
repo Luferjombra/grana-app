@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.auth import CurrentUser
 from app.transactions import service
@@ -196,6 +199,131 @@ async def test_create_rejects_unknown_category(monkeypatch):
             ),
         )
     assert exc_info.value.status_code == 422
+
+
+async def test_installment_purchase_creates_one_row_per_month(monkeypatch):
+    """Marcar 12x precisa lançar as 12 parcelas: sem isso os meses seguintes
+    apareceriam livres do compromisso e o teto 50-30-20 ficaria otimista."""
+    db = install_db(
+        monkeypatch,
+        FakeDb({"transactions": [], "categories": [{"id": 1, "household_id": None}]}),
+    )
+
+    result = await service.create_transaction(
+        USER,
+        TransactionCreate(
+            amount="1200.00",
+            type="expense",
+            occurred_at="2026-08-05",
+            category_id=1,
+            installment_total=12,
+        ),
+    )
+
+    rows = db.rows("transactions")
+    assert len(rows) == 12
+    assert result["installments_created"] == 12
+
+    # Uma por mês, virando o ano corretamente.
+    assert rows[0]["occurred_at"] == "2026-08-05"
+    assert rows[4]["occurred_at"] == "2026-12-05"
+    assert rows[5]["occurred_at"] == "2027-01-05"
+    assert rows[11]["occurred_at"] == "2027-07-05"
+
+    assert [row["installment_number"] for row in rows] == list(range(1, 13))
+    assert all(row["installment_total"] == 12 for row in rows)
+
+
+async def test_installments_sum_to_the_full_purchase(monkeypatch):
+    db = install_db(
+        monkeypatch,
+        FakeDb({"transactions": [], "categories": [{"id": 1, "household_id": None}]}),
+    )
+
+    await service.create_transaction(
+        USER,
+        TransactionCreate(
+            amount="1000.00",
+            type="expense",
+            occurred_at="2026-08-05",
+            category_id=1,
+            installment_total=3,
+        ),
+    )
+
+    amounts = [Decimal(row["amount"]) for row in db.rows("transactions")]
+    assert sum(amounts) == Decimal("1000.00")
+
+
+async def test_a_vista_stays_a_single_row_without_installment_fields(monkeypatch):
+    db = install_db(
+        monkeypatch,
+        FakeDb({"transactions": [], "categories": [{"id": 1, "household_id": None}]}),
+    )
+
+    result = await service.create_transaction(
+        USER,
+        TransactionCreate(amount="50.00", type="expense", occurred_at="2026-08-05", category_id=1),
+    )
+
+    rows = db.rows("transactions")
+    assert len(rows) == 1
+    assert rows[0]["installment_number"] is None
+    assert rows[0]["installment_total"] is None
+    assert result["installments_created"] == 1
+
+
+async def test_installments_clamp_to_the_end_of_short_months(monkeypatch):
+    db = install_db(
+        monkeypatch,
+        FakeDb({"transactions": [], "categories": [{"id": 1, "household_id": None}]}),
+    )
+
+    await service.create_transaction(
+        USER,
+        TransactionCreate(
+            amount="300.00",
+            type="expense",
+            occurred_at="2026-01-31",
+            category_id=1,
+            installment_total=3,
+        ),
+    )
+
+    dates = [row["occurred_at"] for row in db.rows("transactions")]
+    assert dates == ["2026-01-31", "2026-02-28", "2026-03-31"]
+
+
+async def test_create_rejects_malformed_date(monkeypatch):
+    install_db(
+        monkeypatch,
+        FakeDb({"transactions": [], "categories": [{"id": 1, "household_id": None}]}),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_transaction(
+            USER,
+            TransactionCreate(amount="10", type="expense", occurred_at="05/08/2026", category_id=1),
+        )
+    assert exc_info.value.status_code == 422
+
+
+def test_only_expense_can_be_installed():
+    with pytest.raises(ValidationError):
+        TransactionCreate(
+            amount="100", type="income", occurred_at="2026-08-05", installment_total=3
+        )
+
+
+def test_installments_are_capped():
+    with pytest.raises(ValidationError):
+        TransactionCreate(
+            amount="100",
+            type="expense",
+            occurred_at="2026-08-05",
+            category_id=1,
+            installment_total=99,
+        )
 
 
 async def test_update_only_touches_sent_fields(monkeypatch):

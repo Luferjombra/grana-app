@@ -1,5 +1,6 @@
+from calendar import monthrange
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
@@ -30,6 +31,35 @@ def previous_month(month_start: date) -> date:
 def days_in_month(month_start: date) -> int:
     _, end = month_bounds(month_start)
     return (end - month_start).days
+
+
+def add_months(value: date, months: int) -> date:
+    """Avança N meses preservando o dia quando possível.
+
+    Dia 31 + 1 mês não existe em fevereiro: o dia é limitado ao último do mês
+    de destino, como fazem as faturas de cartão.
+    """
+    total = value.month - 1 + months
+    year = value.year + total // 12
+    month = total % 12 + 1
+    last_day = monthrange(year, month)[1]
+    return date(year, month, min(value.day, last_day))
+
+
+def split_installments(total: Decimal, count: int) -> list[Decimal]:
+    """Divide o total em N parcelas que somam exatamente o total.
+
+    O resto da divisão vai na primeira parcela, como é praxe no cartão —
+    arredondar cada parcela por igual faria a soma não fechar com a compra.
+    """
+    if count < 1:
+        raise ValueError("Número de parcelas precisa ser pelo menos 1")
+
+    cents = Decimal("0.01")
+    base = (total / count).quantize(cents, rounding=ROUND_DOWN)
+    remainder = total - base * count
+
+    return [base + remainder] + [base] * (count - 1)
 
 
 def parse_month(month: str) -> date:

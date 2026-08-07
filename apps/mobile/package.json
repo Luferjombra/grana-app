@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.1.1",
+    "@react-native-community/datetimepicker": "9.1.0",
     "@supabase/supabase-js": "^2.112.1",
     "expo": "~57.0.10",
     "expo-constants": "~57.0.9",
@@ -40,7 +41,10 @@
     "format:check": "prettier --check ."
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ]
   },
   "private": true
 }

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 @dataclass
 class FakeResult:
     data: object
+    count: int | None = None
 
 
 @dataclass
@@ -23,6 +24,7 @@ class RecordedQuery:
     order_by: list = field(default_factory=list)
     limit_value: int | None = None
     payload: object = None
+    count_only: bool = False
 
 
 class FakeQuery:
@@ -49,7 +51,10 @@ class FakeQuery:
         self._q.op = "delete"
         return self
 
-    def select(self, *_args, **_kwargs):
+    def select(self, *_args, **kwargs):
+        # head=True pede só a contagem, sem trazer linhas (usado no badge de
+        # notificações não lidas).
+        self._q.count_only = bool(kwargs.get("head"))
         return self
 
     def eq(self, key, value):
@@ -127,6 +132,9 @@ class FakeDb:
             return FakeResult(data=created)
 
         matched = [row for row in rows if _matches(row, q.filters)]
+
+        if q.count_only:
+            return FakeResult(data=[], count=len(matched))
 
         if q.op == "update":
             for row in matched:

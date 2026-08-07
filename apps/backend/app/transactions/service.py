@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import HTTPException
 
 from app.auth import CurrentUser
-from app.common import money, month_bounds, parse_month, to_decimal
+from app.common import add_months, money, month_bounds, parse_month, split_installments, to_decimal
 from app.db import get_db
 from app.transactions.schemas import TransactionCreate, TransactionUpdate
 
@@ -124,27 +124,66 @@ async def create_transaction(current_user: CurrentUser, data: TransactionCreate)
     if data.category_id is not None:
         await _assert_category_visible(current_user, data.category_id)
 
-    query = (
-        get_db()
-        .table("transactions")
-        .insert(
-            {
-                "user_id": current_user.user_id,
-                "household_id": current_user.household_id,
-                "category_id": data.category_id,
-                "type": data.type,
-                "amount": str(data.amount),
-                "occurred_at": data.occurred_at,
-                "merchant": data.merchant,
-                "note": data.note,
-                "entry_method": "manual",
-                "installment_number": data.installment_number,
-                "installment_total": data.installment_total,
-            }
-        )
-    )
+    try:
+        first_date = date.fromisoformat(data.occurred_at)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Data inválida. Use YYYY-MM-DD.") from exc
+
+    rows = _build_installment_rows(current_user, data, first_date)
+
+    query = get_db().table("transactions").insert(rows)
     result = await asyncio.to_thread(query.execute)
-    return _serialize(result.data[0])
+
+    created = result.data or []
+    # Devolve a parcela do mês corrente; quem chama só precisa do id e da data
+    # pra reavaliar os alertas. `installments_created` evita que o cliente
+    # tenha que deduzir se houve expansão.
+    return {**_serialize(created[0]), "installments_created": len(created)}
+
+
+def _build_installment_rows(
+    current_user: CurrentUser, data: TransactionCreate, first_date: date
+) -> list[dict]:
+    """Compra parcelada vira uma transação por parcela, uma em cada mês.
+
+    Sem isso, marcar 12x lançaria o valor cheio no mês atual e deixaria os 11
+    meses seguintes parecendo livres do compromisso — justamente o que um app
+    de orçamento não pode errar (specs/09, decisão de produto do CLAUDE.md).
+    """
+    total_installments = data.installment_total or 1
+    amounts = split_installments(data.amount, total_installments)
+
+    base = {
+        "user_id": current_user.user_id,
+        "household_id": current_user.household_id,
+        "category_id": data.category_id,
+        "type": data.type,
+        "merchant": data.merchant,
+        "note": data.note,
+        "entry_method": "manual",
+    }
+
+    if total_installments == 1:
+        return [
+            {
+                **base,
+                "amount": str(amounts[0]),
+                "occurred_at": first_date.isoformat(),
+                "installment_number": None,
+                "installment_total": None,
+            }
+        ]
+
+    return [
+        {
+            **base,
+            "amount": str(amount),
+            "occurred_at": add_months(first_date, index).isoformat(),
+            "installment_number": index + 1,
+            "installment_total": total_installments,
+        }
+        for index, amount in enumerate(amounts)
+    ]
 
 
 async def update_transaction(

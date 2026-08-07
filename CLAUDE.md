@@ -141,8 +141,22 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     escaparia da regra 50-30-20. Gasto de categoria apagada (`on delete set
     null`) aparece em `uncategorized_expense`, nunca sumindo em silêncio.
   - Valores monetários sempre string decimal; nunca float (specs/09).
+  - **Parcelamento expande no backend**: o cliente manda o valor **cheio** da
+    compra + `installment_total` (máx. 12, só despesa), e
+    `_build_installment_rows` cria uma transação por mês, com
+    `split_installments` garantindo que a soma fecha exatamente com a compra
+    (o resto vai na 1ª parcela) e `add_months` limitando dia 31 ao último dia
+    do mês curto. **Não aceitar `installment_number` do cliente** — a primeira
+    versão fazia isso e perdia 11 de 12 parcelas, deixando os meses seguintes
+    falsamente livres.
+  - `GET /notifications` (com `unread_count` contado à parte, não sobre a
+    página) e `PATCH /notifications/{id}/read` implementados. Marcar como lida
+    libera a chave de idempotência do motor, de propósito.
+  - `GET /categories` criado (a spec 09 não previu, mas a tela precisa):
+    padrão do sistema + as do household, ordenadas na sequência 50-30-20.
   - Ainda **stubs** (`NotImplementedError`): insights, reserva de emergência,
-    gamificação, notificações, `POST /transactions/import` (CSV/OFX).
+    gamificação, `POST /push-tokens` (precisa de tabela que não existe),
+    `POST /transactions/import` (CSV/OFX).
 - ✅ **Spec 07 (motor de projeção/notificação)** — `app/notifications/engine.py`
   é a regra única, chamada pelo gatilho de evento (BackgroundTasks após
   create/update/**delete** de transaction) e pelo cron
@@ -193,7 +207,18 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     **centavos como dígitos** (`lib/money.ts`), nunca float — enviar
     `"8.000,00"` pro backend viraria erro de conversão.
   - **Jest configurado** no mobile (`npm test`, preset `jest-expo`) — a spec 01
-    previa e faltava. Já no CI.
+    previa e faltava. Já no CI. `jest.setup.js` injeta env fictícia porque o
+    client do Supabase é criado no import e recusa URL vazia.
+  - Helpers puros ficam em módulos sem import de client de API
+    (`lib/dates.ts`, `lib/money.ts`) — senão o teste quebra na coleta por
+    falta de configuração de ambiente.
+- ✅ **Tela de adicionar lançamento** (`app/(app)/adicionar.tsx`), desenhada em
+  `prototipo/11-adicionar-v2.html` (o `10-adicionar.html` era um esboço
+  incompleto: sem `0`, sem apagar, sem salvar, e com um "ditar por voz" que não
+  existe em spec nenhuma). Teclado de centavos, categorias por tipo, e
+  data/comerciante/parcelas em pills. O seletor de data precisa de tratamento
+  por plataforma: no iOS é inline e dispara `onChange` a cada giro, então só o
+  Android fecha sozinho.
 - ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
 - ⏳ Spec 08 (push) — não iniciada.
 

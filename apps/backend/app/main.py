@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.budget.router import router as budget_router
+from app.categories.router import router as categories_router
 from app.gamification.router import router as gamification_router
 from app.notifications.router import router as notifications_router
 from app.profile.router import router as profile_router
@@ -15,6 +16,7 @@ app.include_router(gamification_router)
 app.include_router(notifications_router)
 app.include_router(receipts_router)
 app.include_router(profile_router)
+app.include_router(categories_router)
 
 
 @app.get("/health")
