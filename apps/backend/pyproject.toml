@@ -11,6 +11,9 @@ dependencies = [
     "pyjwt>=2.9",
     "mindee>=5.1",
     "python-multipart>=0.0.12",
+    # zoneinfo precisa da base de fusos: Windows não tem, e imagens Docker
+    # slim também não. O cron da spec 07 roda "meia-noite local" (BRT).
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

@@ -85,6 +85,9 @@ No projeto já provisionado, aplicar também as migrations incrementais em
    `receipts` (specs/05). **Pré-requisito manual**: criar o bucket `receipts`
    no painel do Supabase (Storage -> New bucket) marcado como **privado**
    antes de rodar esta migration.
+3. `0003_notifications_dedupe.sql` — `reference_month`/`subject` em
+   `notifications` + índice único parcial de idempotência (specs/07). Sem ela
+   o motor de alertas falha em todo insert.
 
 ## Autenticação (backend)
 

@@ -30,9 +30,13 @@ async def get_dashboard_summary(current_user: CurrentUser, month: str) -> dict:
 
     return {
         "month": month,
+        # "expense" é consumo (o "Saiu" do protótipo) e "saved" é o aporte
+        # ("Investido no mês"), separados de propósito: somar aporte ao gasto
+        # faria parecer que quem cumpre a meta 50-30-20 está no vermelho.
         "cash_flow": {
             "income": money(totals.income),
-            "expense": money(totals.expense),
+            "expense": money(totals.consumption),
+            "saved": money(totals.saved),
             "net": money(totals.income - totals.expense),
         },
         "by_category": distribution,

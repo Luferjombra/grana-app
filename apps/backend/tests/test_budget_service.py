@@ -74,6 +74,31 @@ async def test_summary_splits_income_and_expense(monkeypatch):
     assert summary["cash_flow"]["net"] == "5700.00"
 
 
+async def test_summary_separates_saving_from_spending(monkeypatch):
+    """Aporte sai da conta mas não é consumo — o protótipo mostra "Saiu"
+    (necessidades + desejos) e "Investido no mês" em campos distintos."""
+    install_db(
+        monkeypatch,
+        FakeDb(
+            base_tables(
+                [
+                    tx("8000", None, type="income"),
+                    tx("3800", 1),  # necessidades
+                    tx("2330", 2),  # desejos
+                    tx("1200", 3),  # poupança
+                ]
+            )
+        ),
+    )
+
+    summary = await service.get_dashboard_summary(USER, "2026-08")
+
+    assert summary["cash_flow"]["expense"] == "6130.00"
+    assert summary["cash_flow"]["saved"] == "1200.00"
+    # net desconta tudo que saiu da conta, inclusive o aporte.
+    assert summary["cash_flow"]["net"] == "670.00"
+
+
 async def test_summary_ignores_other_households(monkeypatch):
     install_db(
         monkeypatch,

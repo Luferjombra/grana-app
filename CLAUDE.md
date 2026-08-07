@@ -143,8 +143,34 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   - Valores monetários sempre string decimal; nunca float (specs/09).
   - Ainda **stubs** (`NotImplementedError`): insights, reserva de emergência,
     gamificação, notificações, `POST /transactions/import` (CSV/OFX).
+- ✅ **Spec 07 (motor de projeção/notificação)** — `app/notifications/engine.py`
+  é a regra única, chamada pelo gatilho de evento (BackgroundTasks após
+  create/update/**delete** de transaction) e pelo cron
+  (`etl/projection_recompute.py`). Decisões desta leva:
+  - **Aporte em poupança não é gasto.** `MonthTotals.consumption` (necessidades
+    + desejos + sem categoria) é o que entra na projeção, e o dashboard expõe
+    `cash_flow.expense` = consumo e `cash_flow.saved` = aporte, batendo com o
+    protótipo ("Saiu R$ 6.130" + "Investido no mês R$ 1.200"). Somar aporte ao
+    gasto fazia quem cumpre 50-30-20 levar alerta de risco todo mês, porque a
+    saída planejada é exatamente 100% da renda. **Não reunir esses conceitos.**
+  - **Projeção só a partir do dia 7** (`MIN_DAYS_FOR_PROJECTION`): antes disso
+    uma despesa fixa do dia 1 projetaria ~30× ela mesma. O alerta de teto (95%)
+    continua valendo desde o dia 1, porque compara valor real.
+  - **goal_hit exige gasto > 0** no bucket: não dá pra distinguir "não gastou"
+    de "não registrou", e parabenizar quem não abriu o app seria enganoso.
+    Roda no cron do dia 1, avaliando o mês anterior (`closed=True`).
+  - **Alertas de risco são reconciliados**: se a regra deixou de valer (usuário
+    corrigiu o valor, apagou o gasto), o alerta não lido é apagado — senão fica
+    na tela uma informação falsa. `goal_hit` nunca é retirado.
+  - **Idempotência** via migration 0003: `notifications.reference_month` +
+    `subject`, com índice único parcial em `read = false`. O schema original não
+    tinha como expressar "mesmo alerta, mesmo mês, mesmo bucket".
+  - `reserve_progress` ficou de fora: depende de `emergency_reserve.current_balance`,
+    que nada ainda escreve — entra junto com o endpoint da reserva.
+  - O cron importa `app.notifications.engine`, então o job precisa do pacote
+    `grana-backend` instalado junto (o workflow já faz).
 - ⏳ Spec 06 (Pluggy/Open Finance) — não iniciada.
-- ⏳ Specs 07, 08 — não iniciadas.
+- ⏳ Spec 08 (push) — não iniciada.
 
 ## Próximos passos sugeridos (retomar por aqui)
 

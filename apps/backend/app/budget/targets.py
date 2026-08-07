@@ -13,6 +13,7 @@ DEFAULT_RULE = {"necessidades_pct": 50, "desejos_pct": 30, "poupanca_pct": 20}
 @dataclass
 class MonthTotals:
     income: Decimal
+    # Toda saída da conta, inclusive aporte em poupança.
     expense: Decimal
     by_bucket: dict[str, Decimal]
     by_category: dict[int | None, dict]
@@ -21,6 +22,22 @@ class MonthTotals:
     # exposta à parte — do contrário a soma dos buckets não fecharia com o
     # total de gastos e o health score ignoraria o valor em silêncio.
     uncategorized_expense: Decimal
+
+    @property
+    def saved(self) -> Decimal:
+        """Aporte em poupança/investimento. Sai da conta, mas não é consumo."""
+        return self.by_bucket.get("poupanca", Decimal("0"))
+
+    @property
+    def consumption(self) -> Decimal:
+        """Gasto de consumo — o "Saiu" do protótipo (necessidades + desejos +
+        sem categoria), sem os aportes.
+
+        Separar importa: com 50-30-20 a saída total planejada é 100% da renda,
+        então tratar aporte como gasto faria a projeção da spec 07 acusar risco
+        justamente em quem cumpre a meta.
+        """
+        return self.expense - self.saved
 
 
 async def get_budget_rule(household_id: int) -> dict:

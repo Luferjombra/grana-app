@@ -1,9 +1,35 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
 BUCKETS = ("necessidades", "desejos", "poupanca")
+
+BUCKET_LABELS = {
+    "necessidades": "Necessidades",
+    "desejos": "Desejos",
+    "poupanca": "Poupança",
+}
+
+# O produto é brasileiro e o cron da spec 07 roda "meia-noite local" — datar
+# pelo UTC do servidor jogaria transações das 21h–00h pro dia seguinte.
+APP_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+
+
+def today_local() -> date:
+    return datetime.now(APP_TIMEZONE).date()
+
+
+def previous_month(month_start: date) -> date:
+    if month_start.month == 1:
+        return date(month_start.year - 1, 12, 1)
+    return date(month_start.year, month_start.month - 1, 1)
+
+
+def days_in_month(month_start: date) -> int:
+    _, end = month_bounds(month_start)
+    return (end - month_start).days
 
 
 def parse_month(month: str) -> date:

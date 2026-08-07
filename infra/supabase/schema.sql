@@ -255,8 +255,21 @@ create table notifications (
   title             text not null,
   message           text not null,
   read              boolean not null default false,
+  reference_month   date,            -- mês a que o alerta se refere (specs/07)
+  subject           text,            -- bucket afetado (null p/ projeção)
   created_at        timestamptz not null default now()
 );
+
+-- Um alerta não lido por (usuário, tipo, mês, assunto) — idempotência do
+-- motor de notificação (specs/07). Parcial: depois de lido, pode gerar de novo.
+create unique index notifications_unread_dedupe
+  on notifications (
+    user_id,
+    type,
+    coalesce(reference_month, '1970-01-01'::date),
+    coalesce(subject, '')
+  )
+  where read = false;
 
 create index idx_notifications_user_unread on notifications (user_id, read);
 

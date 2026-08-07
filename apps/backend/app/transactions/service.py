@@ -172,7 +172,9 @@ async def update_transaction(
     return _serialize(result.data[0])
 
 
-async def delete_transaction(current_user: CurrentUser, transaction_id: int) -> None:
+async def delete_transaction(current_user: CurrentUser, transaction_id: int) -> dict:
+    """Devolve a linha removida — quem chama precisa do occurred_at pra saber
+    qual mês reavaliar no motor de alertas."""
     query = (
         get_db()
         .table("transactions")
@@ -183,3 +185,4 @@ async def delete_transaction(current_user: CurrentUser, transaction_id: int) -> 
     result = await asyncio.to_thread(query.execute)
     if not result.data:
         raise HTTPException(status_code=404, detail="Transação não encontrada.")
+    return _serialize(result.data[0])
