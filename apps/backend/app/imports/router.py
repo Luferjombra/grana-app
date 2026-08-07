@@ -1,6 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 
 from app.auth import CurrentUser, get_current_user
+from app.common import today_local
 from app.imports import service
 from app.imports.schemas import ImportConfirm
 from app.notifications.engine import evaluate_after_transaction
@@ -25,11 +26,17 @@ async def confirm_import(
 ):
     result = await service.confirm_import(current_user, data)
 
-    # Um extrato costuma cobrir mais de um mês; reavalia cada um, senão o
-    # alerta de teto ignoraria tudo que entrou de uma vez.
-    for month in result["months_touched"]:
+    # Só o mês corrente gera alerta. Extrato de histórico cobre meses já
+    # encerrados, e avaliá-los criaria hoje alertas de teto e de "projeção
+    # negativa" sobre orçamentos de anos atrás — num extrato real de 12 meses
+    # isso viravam dezenas de notificações inúteis e enganosas, já que num mês
+    # fechado a "projeção" é só o gasto que de fato aconteceu.
+    # Os meses passados seguem corretos no dashboard e nos insights: os tetos
+    # deles são gerados sob demanda quando o mês é consultado.
+    current_month = today_local().strftime("%Y-%m")
+    if current_month in result["months_touched"]:
         background_tasks.add_task(
-            evaluate_after_transaction, current_user.household_id, f"{month}-01"
+            evaluate_after_transaction, current_user.household_id, f"{current_month}-01"
         )
 
     return result

@@ -1,5 +1,6 @@
 import asyncio
 from datetime import date
+from decimal import Decimal
 
 from fastapi import HTTPException, UploadFile
 
@@ -8,6 +9,7 @@ from app.common import money, to_decimal
 from app.db import get_db
 from app.imports.parser import MAX_ROWS, ParsedRow, parse_csv, parse_ofx
 from app.imports.schemas import ImportConfirm, ImportRow
+from app.imports.suggest import merchant_key, normalize, suggest_category_id
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
@@ -32,6 +34,7 @@ async def preview_import(current_user: CurrentUser, file: UploadFile) -> dict:
 
     already_imported = await _existing_external_ids(current_user, rows)
     existing_signatures = await _existing_signatures(current_user, rows)
+    categories_by_name = await _categories_by_name(current_user)
 
     items = []
     for row in rows:
@@ -50,21 +53,80 @@ async def preview_import(current_user: CurrentUser, file: UploadFile) -> dict:
                 "description": row.description,
                 "external_id": row.external_id,
                 "likely_duplicate": duplicate,
-                # Fica pro usuário preencher no preview.
-                "category_id": None,
+                "category_id": suggest_category_id(row.description, categories_by_name),
             }
         )
 
+    groups = _group_by_merchant(rows, items)
+
     return {
-        "items": items,
+        "groups": groups,
         "summary": {
             "total": len(items),
+            "merchants": len(groups),
+            "suggested": sum(1 for item in items if item["category_id"] is not None),
             "likely_duplicates": sum(1 for item in items if item["likely_duplicate"]),
             # Avisa quando o arquivo foi cortado, em vez de deixar o usuário
             # achar que importou tudo.
             "truncated": len(rows) >= MAX_ROWS,
         },
     }
+
+
+def _group_by_merchant(rows: list[ParsedRow], items: list[dict]) -> list[dict]:
+    """Agrupa por comerciante pra uma escolha valer pelo grupo inteiro.
+
+    É o que torna o import de histórico viável: num extrato real de um ano,
+    951 despesas vinham de 169 comerciantes, e ~44 escolhas cobriam 80% delas.
+    Item a item seriam 951 decisões e o usuário abandonaria (specs/11).
+
+    Ordenado por quantidade: o usuário resolve primeiro o que mais pesa.
+    """
+    buckets: dict[str, dict] = {}
+
+    for row, item in zip(rows, items, strict=True):
+        key = merchant_key(row.description) or "(sem descrição)"
+        bucket = buckets.setdefault(
+            key,
+            {
+                "merchant_key": key,
+                "label": row.description.strip() or "Sem descrição",
+                "suggested_category_id": item["category_id"],
+                "items": [],
+            },
+        )
+        # A sugestão do grupo é a primeira que aparecer: linhas do mesmo
+        # comerciante caem na mesma regra, então não há conflito real.
+        if bucket["suggested_category_id"] is None:
+            bucket["suggested_category_id"] = item["category_id"]
+        bucket["items"].append(item)
+
+    groups = []
+    for bucket in buckets.values():
+        expenses = [item for item in bucket["items"] if item["type"] == "expense"]
+        groups.append(
+            {
+                **bucket,
+                "count": len(bucket["items"]),
+                "total": money(
+                    sum((to_decimal(item["amount"]) for item in expenses), Decimal("0"))
+                ),
+                "likely_duplicates": sum(1 for item in bucket["items"] if item["likely_duplicate"]),
+            }
+        )
+
+    return sorted(groups, key=lambda group: group["count"], reverse=True)
+
+
+async def _categories_by_name(current_user: CurrentUser) -> dict[str, int]:
+    query = (
+        get_db()
+        .table("categories")
+        .select("id, name, household_id")
+        .or_(f"household_id.is.null,household_id.eq.{current_user.household_id}")
+    )
+    result = await asyncio.to_thread(query.execute)
+    return {normalize(row["name"]): row["id"] for row in (result.data or [])}
 
 
 def _signature(row: ParsedRow) -> tuple[str, str, str]:

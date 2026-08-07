@@ -29,11 +29,15 @@ def upload(content: bytes, filename: str) -> UploadFile:
     )
 
 
+SEED_CATEGORIES = [
+    {"id": 1, "name": "Mercado", "household_id": None},
+    {"id": 2, "name": "Transporte", "household_id": None},
+    {"id": 3, "name": "Delivery", "household_id": None},
+]
+
+
 def base_tables(**extra):
-    tables = {
-        "transactions": [],
-        "categories": [{"id": 1, "household_id": None}, {"id": 2, "household_id": 42}],
-    }
+    tables = {"transactions": [], "categories": list(SEED_CATEGORIES)}
     tables.update(extra)
     return tables
 
@@ -41,6 +45,10 @@ def base_tables(**extra):
 def install(monkeypatch, db):
     monkeypatch.setattr(service, "get_db", lambda: db)
     return db
+
+
+def all_items(preview: dict) -> list[dict]:
+    return [item for group in preview["groups"] for item in group["items"]]
 
 
 # --------------------------------------------------------------------------
@@ -54,16 +62,30 @@ async def test_preview_does_not_persist_anything(monkeypatch):
 
     result = await service.preview_import(USER, upload(CSV.encode(), "extrato.csv"))
 
-    assert len(result["items"]) == 2
+    assert len(all_items(result)) == 2
     assert db.rows("transactions") == []
 
 
-async def test_preview_leaves_category_empty_for_the_user(monkeypatch):
+async def test_preview_suggests_category_by_description(monkeypatch):
+    """Palavra-chave cobre pouco sozinha (16% num extrato real), mas o que ela
+    acerta o usuário não precisa tocar."""
     install(monkeypatch, FakeDb(base_tables()))
+    content = "Data;Descrição;Valor\n05/08/2026;SUPERMERCADO XYZ;-150,00\n".encode()
 
-    result = await service.preview_import(USER, upload(CSV.encode(), "extrato.csv"))
+    result = await service.preview_import(USER, upload(content, "extrato.csv"))
 
-    assert all(item["category_id"] is None for item in result["items"])
+    assert result["groups"][0]["suggested_category_id"] == 1  # Mercado
+    assert result["summary"]["suggested"] == 1
+
+
+async def test_preview_leaves_category_empty_when_nothing_matches(monkeypatch):
+    install(monkeypatch, FakeDb(base_tables()))
+    content = "Data;Descrição;Valor\n05/08/2026;PIX ENVIADO JOAO;-50,00\n".encode()
+
+    result = await service.preview_import(USER, upload(content, "extrato.csv"))
+
+    # PIX é meio de pagamento, não categoria — melhor vazio que palpite errado.
+    assert result["groups"][0]["suggested_category_id"] is None
 
 
 async def test_preview_reads_ofx_by_extension(monkeypatch):
@@ -71,7 +93,44 @@ async def test_preview_reads_ofx_by_extension(monkeypatch):
 
     result = await service.preview_import(USER, upload(OFX.encode(), "extrato.ofx"))
 
-    assert result["items"][0]["external_id"] == "ofx:ABC1"
+    assert all_items(result)[0]["external_id"] == "ofx:ABC1"
+
+
+async def test_preview_groups_the_same_merchant(monkeypatch):
+    """O que torna o import de histórico viável: uma escolha vale pelo grupo."""
+    install(monkeypatch, FakeDb(base_tables()))
+    content = (
+        "Data;Descrição;Valor\n"
+        "05/08/2026;PADARIA DONA BETINHA SAO PAULO BRA;-12,00\n"
+        "06/08/2026;PADARIA DONA BETINHA OSASCO BRA 123;-15,00\n"
+        "07/08/2026;POSTO IPIRANGA;-200,00\n"
+    ).encode()
+
+    result = await service.preview_import(USER, upload(content, "extrato.csv"))
+
+    assert result["summary"]["total"] == 3
+    # Cidade, "BRA" e número são ruído de descritor de cartão: as duas compras
+    # da padaria têm que cair no mesmo grupo.
+    assert result["summary"]["merchants"] == 2
+
+    biggest = result["groups"][0]
+    assert biggest["count"] == 2
+    assert biggest["total"] == "27.00"
+
+
+async def test_preview_orders_groups_by_volume(monkeypatch):
+    """Maior primeiro: o usuário resolve o que mais pesa antes de cansar."""
+    install(monkeypatch, FakeDb(base_tables()))
+    content = (
+        "Data;Descrição;Valor\n"
+        "05/08/2026;LOJA UNICA;-10,00\n"
+        "06/08/2026;POSTO IPIRANGA;-100,00\n"
+        "07/08/2026;POSTO IPIRANGA;-100,00\n"
+    ).encode()
+
+    result = await service.preview_import(USER, upload(content, "extrato.csv"))
+
+    assert result["groups"][0]["count"] == 2
 
 
 async def test_preview_flags_reimported_ofx_transaction(monkeypatch):
@@ -95,7 +154,7 @@ async def test_preview_flags_reimported_ofx_transaction(monkeypatch):
 
     result = await service.preview_import(USER, upload(OFX.encode(), "extrato.ofx"))
 
-    assert result["items"][0]["likely_duplicate"] is True
+    assert all_items(result)[0]["likely_duplicate"] is True
     assert result["summary"]["likely_duplicates"] == 1
 
 
@@ -120,7 +179,7 @@ async def test_preview_flags_csv_duplicate_by_signature(monkeypatch):
     )
 
     result = await service.preview_import(USER, upload(CSV.encode(), "extrato.csv"))
-    by_date = {item["occurred_at"]: item for item in result["items"]}
+    by_date = {item["occurred_at"]: item for item in all_items(result)}
 
     assert by_date["2026-08-05"]["likely_duplicate"] is True
     assert by_date["2026-08-06"]["likely_duplicate"] is False
@@ -147,7 +206,7 @@ async def test_preview_ignores_transaction_from_another_household(monkeypatch):
 
     result = await service.preview_import(USER, upload(OFX.encode(), "extrato.ofx"))
 
-    assert result["items"][0]["likely_duplicate"] is False
+    assert all_items(result)[0]["likely_duplicate"] is False
 
 
 async def test_preview_rejects_empty_file(monkeypatch):

@@ -181,6 +181,19 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   - `imports_router` é registrado **antes** de `transactions_router` no
     `main.py`: `/transactions/import` é caminho literal e precisa ganhar de
     `/transactions/{transaction_id}`.
+  - **Validado contra extrato real** (Banco C6, 1.059 lançamentos, 12 meses),
+    que derrubou duas decisões da spec original:
+    - Pedir categoria item a item era inviável (951 despesas). O que resolve é
+      **agrupar por comerciante** (`suggest.merchant_key`): ~170 grupos, sendo
+      que os 10 maiores cobrem 521 lançamentos e ~44 cobrem 80%. Sugestão por
+      palavra-chave cobre só **16%** — vale pelo que é de graça, não como
+      solução. **Não trocar agrupamento por mais palavras-chave.**
+    - Confirmar import reavalia alertas **só do mês corrente**: avaliar meses
+      encerrados criava dezenas de alertas de risco retroativos, e num mês
+      fechado a "projeção" é só o gasto que já aconteceu.
+    - Princípio nas regras de sugestão: **melhor vazio que palpite errado** —
+      sugestão errada que passa batida distorce o 50-30-20 em silêncio. Termo
+      ambíguo fica fora; PIX/boleto/fatura não têm regra.
 - ✅ **Spec 07 (motor de projeção/notificação)** — `app/notifications/engine.py`
   é a regra única, chamada pelo gatilho de evento (BackgroundTasks após
   create/update/**delete** de transaction) e pelo cron

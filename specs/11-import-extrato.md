@@ -51,11 +51,47 @@ valor = 0  -> linha descartada
 
 O extrato traz a descrição do banco ("PIX ENVIADO JOAO"), não categoria. Como
 despesa sem categoria escapa da regra 50-30-20 (ver `specs/09` e o histórico do
-`CLAUDE.md`), a confirmação **exige** `category_id` em cada despesa. O preview
-é onde o usuário escolhe.
+`CLAUDE.md`), a confirmação **exige** `category_id` em cada despesa.
 
-Não há adivinhação por palavra-chave nesta versão: erraria e exigiria manter
-uma lista de regras.
+### Como isso vira poucas decisões (revisado com extrato real)
+
+A primeira versão desta spec dizia "sem adivinhação por palavra-chave: erraria
+e exigiria manter regras". Um extrato real de um ano (Banco C6, 1.059
+lançamentos) derrubou essa decisão: **951 eram despesas**, e pedir categoria em
+cada uma tornava o import inutilizável justamente no caso que mais importa,
+trazer histórico pra ter comparação mês a mês.
+
+Duas medidas, nesta ordem de eficácia:
+
+**1. Agrupar por comerciante** (`suggest.merchant_key`) — o que realmente
+resolve. As 951 despesas vinham de ~170 comerciantes; os 10 maiores grupos
+cobriam 521 lançamentos, e ~44 grupos cobriam 80%. Uma escolha vale pelo grupo
+inteiro. A chave descarta número e ruído de descritor de cartão (país, cidade,
+UF, sufixo de razão social) e usa as primeiras palavras, porque o final da
+descrição varia entre compras do mesmo lugar.
+
+**2. Sugerir por palavra-chave** (`suggest.RULES`) — ajuda, mas **cobre só 16%**
+sozinha, medido nesse extrato. Vale pelo que é de graça, não como solução.
+
+Regra de ouro: **melhor não sugerir do que sugerir errado.** Sugestão errada que
+passa batida joga o gasto no bucket errado e distorce o 50-30-20 em silêncio;
+campo vazio o usuário enxerga. Por isso termos ambíguos ficam fora
+(ex: "PARK" pode ser estacionamento ou ParkShopping), e PIX/TED/boleto/fatura
+não têm regra — são meio de pagamento, não categoria.
+
+O preview é ordenado por volume: o usuário resolve o que mais pesa antes de
+cansar. O grupo com muitos itens e uma decisão só é o ponto do desenho.
+
+## Alertas só do mês corrente
+
+A confirmação reavalia alertas **apenas do mês corrente**. Extrato de histórico
+cobre meses encerrados, e avaliá-los criaria hoje alertas de teto e de "projeção
+negativa" sobre orçamentos de anos atrás — no arquivo real de 12 meses isso
+seriam dezenas de notificações inúteis, e enganosas, já que num mês fechado a
+"projeção" é só o gasto que de fato aconteceu.
+
+Meses passados continuam corretos no dashboard e nos insights: os tetos deles
+são gerados sob demanda quando o mês é consultado.
 
 ## Detalhe de schema corrigido junto
 
