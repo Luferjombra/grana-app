@@ -21,6 +21,15 @@ import {
   isPositiveAmount,
   numberToCents,
 } from '../../../lib/money';
+import {
+  getAchievements,
+  getProgress,
+  getRoundup,
+  transferRoundup,
+  type Achievements,
+  type Progress,
+  type Roundup,
+} from '../../../lib/gamification';
 import { getReserve, PROFILE_LABELS, updateReserve, type Reserve } from '../../../lib/reserve';
 
 /**
@@ -43,6 +52,9 @@ export default function Metas() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [editing, setEditing] = useState<Editing>('none');
   const [digits, setDigits] = useState('');
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [achievements, setAchievements] = useState<Achievements | null>(null);
+  const [roundup, setRoundup] = useState<Roundup | null>(null);
   const [error, setError] = useState<string | undefined>();
 
   const month = currentMonth();
@@ -72,6 +84,18 @@ export default function Metas() {
         if (cancelled) return;
         setSavings(data.buckets.find((b) => b.bucket === 'poupanca') ?? null);
       })
+      .catch(() => {});
+
+    // Gamificação é acessório: se falhar, a seção some em silêncio em vez de
+    // virar erro em cima da reserva, que é o conteúdo principal da aba.
+    getProgress()
+      .then((data) => !cancelled && setProgress(data))
+      .catch(() => {});
+    getAchievements()
+      .then((data) => !cancelled && setAchievements(data))
+      .catch(() => {});
+    getRoundup()
+      .then((data) => !cancelled && setRoundup(data))
       .catch(() => {});
 
     return () => {
@@ -114,6 +138,15 @@ export default function Metas() {
     } catch {
       setError('Não foi possível salvar. Tente de novo.');
       setEditing(mode);
+    }
+  }
+
+  async function confirmTransfer() {
+    try {
+      await transferRoundup();
+      setRoundup(await getRoundup());
+    } catch {
+      setError('Não foi possível registrar a transferência.');
     }
   }
 
@@ -315,12 +348,97 @@ export default function Metas() {
         </>
       ) : null}
 
-      {/* Diz o que ainda não existe, em vez de deixar a aba parecer completa. */}
-      <Text style={styles.note}>
-        Nível, XP e conquistas entram aqui quando a regra de pontuação for definida. O cofrinho de
-        arredondamento é manual nesta fase — automação real depende de conexão bancária, que está
-        fora de escopo.
-      </Text>
+      {/* ------------------------------------------------------ progresso */}
+      {progress ? (
+        <>
+          <Text style={styles.section}>Seu progresso</Text>
+          <View style={styles.card}>
+            <View style={styles.levelRow}>
+              <View style={styles.levelBadge}>
+                <Text style={styles.levelNumber}>{progress.level}</Text>
+                <Text style={styles.levelWord}>nível</Text>
+              </View>
+              <View style={styles.levelSide}>
+                <Text style={styles.rowName}>{progress.total_xp} XP neste mês</Text>
+                <View style={styles.track}>
+                  <View
+                    style={[
+                      styles.fill,
+                      {
+                        width: `${Math.round((progress.xp_into_level / progress.xp_per_level) * 100)}%`,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.rowMeta}>
+                  {progress.xp_per_level - progress.xp_into_level} XP para o próximo nível
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+            {progress.breakdown.map((entry) => (
+              <View key={entry.source} style={styles.row}>
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowName}>{entry.label}</Text>
+                  <Text style={styles.rowMeta}>{entry.detail}</Text>
+                </View>
+                <Text style={styles.rowValue}>{entry.xp} XP</Text>
+              </View>
+            ))}
+
+            <Text style={styles.note}>
+              Dia ativo conta uma vez, mesmo que você registre trinta lançamentos nele: o app não
+              premia quem gasta mais. Nada aqui é perdido — não existe streak que zera nem XP que
+              volta atrás.
+            </Text>
+          </View>
+        </>
+      ) : null}
+
+      {/* ------------------------------------------------------- cofrinho */}
+      {roundup && Number(roundup.accumulated) > 0 ? (
+        <>
+          <Text style={styles.section}>Cofrinho de arredondamento</Text>
+          <View style={styles.card}>
+            <Text style={styles.label}>Troco guardado neste mês</Text>
+            <Text style={styles.big}>{formatApiAmount(roundup.accumulated)}</Text>
+            <Text style={styles.rowMeta}>
+              de {roundup.eligible_transactions} lançamentos arredondados para cima
+            </Text>
+
+            <Pressable style={styles.ghost} onPress={confirmTransfer}>
+              <Text style={styles.ghostText}>Já transferi esse valor</Text>
+            </Pressable>
+            <Text style={styles.note}>
+              O app não move dinheiro: você transfere no seu banco e confirma aqui. Transferência
+              automática dependeria de conexão bancária, que está fora de escopo.
+            </Text>
+          </View>
+        </>
+      ) : null}
+
+      {/* ----------------------------------------------------- conquistas */}
+      {achievements ? (
+        <>
+          <Text style={styles.section}>
+            Conquistas · {achievements.unlocked_count} de {achievements.total}
+          </Text>
+          <View style={styles.card}>
+            {achievements.items.map((item) => (
+              <View key={item.code} style={styles.row}>
+                <Text style={[styles.badge, item.unlocked && styles.badgeOn]}>
+                  {item.unlocked ? '★' : '☆'}
+                </Text>
+                <View style={styles.rowMain}>
+                  <Text style={[styles.rowName, !item.unlocked && styles.locked]}>{item.name}</Text>
+                  <Text style={styles.rowMeta}>{item.description}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
     </ScrollView>
   );
 }
@@ -411,6 +529,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   ghostText: { color: '#8a8f98', fontSize: 12.5 },
+
+  divider: { height: 1, backgroundColor: '#262b33', marginVertical: 10 },
+  levelRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  levelBadge: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#232832',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelNumber: { color: '#e8a33d', fontSize: 20, fontWeight: '500' },
+  levelWord: { color: '#5c626b', fontSize: 8.5, textTransform: 'uppercase', letterSpacing: 0.6 },
+  levelSide: { flex: 1, gap: 5 },
+  badge: { fontSize: 15, color: '#5c626b', width: 18 },
+  badgeOn: { color: '#e8a33d' },
+  locked: { color: '#8a8f98' },
 
   warn: {
     backgroundColor: '#221d14',

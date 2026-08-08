@@ -491,10 +491,39 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   - `GET /emergency-reserve` passou a ler os 3 meses da sugestão em **uma
     consulta de intervalo**: como a Home chama esse endpoint no foco, três idas
     sequenciais viravam latência na tela mais aberta do app.
-- ⏳ Gamificação (spec 09) — **não bloqueia mais nada**. XP, nível, conquistas e
-  cofrinho entram como segunda seção da aba Metas, que já existe e tem conteúdo.
-  Continua parada na decisão do usuário sobre a regra de XP (quanto vale
-  registrar vs quanto vale bater a meta).
+- ✅ **Gamificação e cofrinho** (`app/gamification/`, seção da aba Metas) — fecha
+  a spec 09 inteira. Regra decidida em 08/08/2026 com **Duolingo, Habitica e
+  Fortune City** como balizadores, e o caso **Robinhood** como aviso.
+  - **O risco central era premiar o comportamento que o app existe pra reduzir.**
+    No Grana você registra quando gasta, então XP por lançamento faria quem
+    compra 30 cafés ganhar 10× mais que quem compra 3. Foi o mecanismo pelo qual
+    Massachusetts processou a Robinhood (acordo de ~US$ 7,5 mi + remoção das
+    features); a FCA mediu push aumentando volume em 11% e sorteio em 12%.
+  - **Três regras não negociáveis**: XP de hábito por **dia ativo** (máx. 1/dia,
+    nunca por lançamento — é o teto diário do Fortune City); **sem ranking** entre
+    pessoas (idioma dá pra comparar, gasto é vergonha); **sem punição** (o app
+    pode deixar de premiar, nunca cobrar).
+  - `XP_PER_ACTIVE_DAY = 10` → teto 300/mês. `RESULT_XP_POOL = 300` distribuído
+    pelos percentuais **vigentes do household**: edite o 50-30-20 e o XP
+    acompanha sem código novo. `XP_PER_LEVEL = 600` = um mês perfeito, a única
+    curva explicável numa frase. O ~50/50 é **consequência dos tetos**, não um
+    percentual escolhido a dedo.
+  - **Dia ativo vem de `created_at`, não de `occurred_at`.** Importar o extrato de
+    julho no dia 20/08 é uso do app em agosto; contar por `occurred_at` erraria
+    nos dois sentidos e daria ~30 dias ativos de uma vez. **Consulta separada de
+    `_month_rows`** por isso, com teste de regressão — o fixture dos outros testes
+    tem as duas datas alinhadas e não pegava.
+  - **XP é calculado das transações, não acumulado em contador.** `user_progress`
+    e `xp_events` seguem sem uso, como `accounts`: contador incrementado por
+    evento fica errado pra sempre no primeiro erro, e apagar um lançamento aqui
+    corrige o XP sozinho. Se a conta pesar, materializar o mês fechado — nunca
+    voltar a incrementar.
+  - **Conquista é derivada**, não gravada: job que falha deixaria a conquista
+    presa pra sempre. Preço: sem data de desbloqueio.
+  - **Cofrinho é manual** e o app diz isso: `automatic: false`. `POST
+    /roundup/transfer` só registra que o usuário transferiu — mover dinheiro
+    exigiria ITP via Open Finance, adiado. Despesa em real inteiro rende **zero**
+    troco, não um real. `roundup_savings` é o livro do que foi confirmado.
 
 ## Próximos passos sugeridos (retomar por aqui)
 
