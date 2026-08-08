@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insights (v2)</title>
+<!--
+  Revisão de 07-insights.html, agora que os 5 endpoints da spec 09 existem.
+
+  O que mudou em relação ao esboço original:
+
+  1. MÊS PARCIAL FICA VISÍVEL. O original mostrava "Lazer +18%" sem dizer que o
+     mês está em curso. O backend compara os dois meses cortados no mesmo dia
+     justamente pra não anunciar economia falsa (`partial` + `comparable_days`),
+     e a tela precisa dizer isso — senão o cuidado do backend morre aqui.
+  2. Entraram duas seções que o original não tinha, porque os endpoints existem:
+     média de 3 meses e o detalhe do health score.
+  3. Top gastos ganhou rótulo pra lançamento sem descrição. O backend devolve
+     `merchant: null` (49 casos no extrato real, um deles de R$ 23.395), e linha
+     em branco no "maiores gastos" é o pior lugar pra isso aparecer.
+  4. Assinatura cancelada aparece separada e FORA do total mensal.
+  5. "Sugestão prática" do original está marcada como NÃO IMPLEMENTADA. Não
+     existe endpoint pra isso, e a frase do esboço ("corte R$ 150 em delivery e
+     bate a meta de poupança") é conta que dá pra fazer — mas é feature nova,
+     não algo que já esteja pronto. Precisa de decisão antes de virar código.
+
+  Valores são ILUSTRATIVOS numa escala realista, exceto as assinaturas, cujos
+  padrões (estacionamento recorrente de valor baixo, pedágio de R$ 5,90 em 7
+  meses) foram de fato detectados no extrato real do C6. Comerciantes são
+  fictícios: o extrato de origem é gasto pessoal do usuário.
+
+  Sem CDN: o CSP do Artifact bloqueia host externo, então ícone é SVG inline.
+-->
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #14171c; --surface: #1c2028; --raised: #232832; --line: #262b33;
+    --text: #eef0f3; --soft: #cfd3d9; --dim: #8a8f98; --faint: #5c626b;
+    --accent: #e8a33d; --ink: #2a1c04; --good: #5dcaa5; --bad: #d85a30;
+  }
+  body {
+    margin: 0; padding: 28px 16px 60px; background: #2b2e33;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 18px;
+  }
+  button { font: inherit; cursor: pointer; }
+  .frame {
+    width: 390px; max-width: 100%; background: var(--bg); border-radius: 28px;
+    overflow: hidden; border: 6px solid #05070a;
+  }
+  .scroll { max-height: 760px; overflow-y: auto; }
+
+  .top { padding: 1.1rem 1.1rem .4rem; display: flex; justify-content: space-between; align-items: flex-start; }
+  .top h1 { font-size: 16px; font-weight: 500; margin: 0; }
+  .top p { font-size: 11px; color: var(--dim); margin: 2px 0 0; }
+  .pad { padding: .5rem 1.1rem 1.4rem; }
+
+  h2 {
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+    font-weight: 500; margin: 20px 0 9px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  h2:first-of-type { margin-top: 6px; }
+
+  .card { background: var(--surface); border-radius: 12px; padding: 13px 14px; }
+  .card + .card { margin-top: 8px; }
+
+  /* aviso de mês parcial — o ponto central desta tela */
+  .partial {
+    display: flex; align-items: center; gap: 8px;
+    background: #221d14; border: 1px solid #3d3320; border-radius: 10px;
+    padding: 9px 11px; margin-bottom: 10px;
+  }
+  .partial svg { flex: none; color: var(--accent); }
+  .partial p { margin: 0; font-size: 11px; color: #e0c79a; line-height: 1.45; }
+
+  .big { font-size: 26px; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .lbl { font-size: 11px; color: var(--dim); }
+
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #22272f; }
+  .row:last-child { border-bottom: none; }
+  .row .name { flex: 1; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .sub { font-size: 10.5px; color: var(--faint); margin-top: 1px; }
+  .row .val { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .row .chg { font-size: 11px; font-variant-numeric: tabular-nums; width: 62px; text-align: right; }
+  .up { color: var(--bad); }
+  .down { color: var(--good); }
+  .flat { color: var(--dim); }
+  .nodesc { color: var(--faint); font-style: italic; }
+
+  /* barra dupla: mês anterior atrás, mês atual na frente */
+  .bars { flex: none; width: 74px; }
+  .bar { height: 5px; border-radius: 3px; background: #343b45; }
+  .bar + .bar { margin-top: 3px; }
+  .bar span { display: block; height: 5px; border-radius: 3px; background: var(--accent); }
+  .bar.prev span { background: #4b535f; }
+
+  .rank { width: 16px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+  /* health score */
+  .score { display: flex; align-items: center; gap: 14px; }
+  .dial { flex: none; width: 62px; height: 62px; position: relative; }
+  .dial svg { transform: rotate(-135deg); }
+  .dial .num {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums;
+  }
+  .tag {
+    display: inline-block; font-size: 10px; border-radius: 10px; padding: 2px 8px;
+    background: var(--accent); color: var(--ink);
+  }
+  .tag.risk { background: var(--bad); color: #fff; }
+  .tag.ok { background: var(--good); color: #08251b; }
+
+  .kind { font-size: 9.5px; color: var(--faint); border: 1px solid var(--line); border-radius: 8px; padding: 1px 5px; }
+
+  details { margin-top: 10px; }
+  details summary {
+    font-size: 11.5px; color: var(--dim); cursor: pointer; list-style: none;
+    padding: 6px 0;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::after { content: ' ▾'; }
+  details[open] summary::after { content: ' ▴'; }
+
+  .note { font-size: 11px; color: var(--faint); line-height: 1.5; margin: 10px 0 0; }
+
+  .todo {
+    border: 1px dashed #4a3a22; border-radius: 12px; padding: 12px 14px;
+    background: #201a11; margin-top: 8px;
+  }
+  .todo h3 { font-size: 12px; font-weight: 500; margin: 0 0 5px; color: var(--accent); }
+  .todo p { font-size: 11px; color: #cbb894; line-height: 1.5; margin: 0; }
+
+  .tabs { display: flex; border-top: 1px solid var(--line); background: #171a1f; }
+  .tabs div { flex: 1; text-align: center; padding: 10px 0 12px; font-size: 10px; color: var(--faint); }
+  .tabs div[aria-current="true"] { color: var(--accent); }
+
+  .legend { width: 460px; max-width: 100%; font-size: 11.5px; color: #9aa0a8; line-height: 1.6; }
+  .legend b { color: var(--soft); font-weight: 500; }
+  .legend code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px; color: #cfd3d9; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+ <div class="scroll">
+
+  <div class="top">
+    <div>
+      <h1>Insights</h1>
+      <p>Agosto · dia 15 de 31</p>
+    </div>
+    <span class="tag">parcial</span>
+  </div>
+
+  <div class="pad">
+
+    <!-- ============ mês a mês ============ -->
+    <h2>Mês a mês</h2>
+
+    <div class="partial">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <p>
+        Agosto ainda está em curso, então a comparação usa <b>os 15 primeiros dias</b> de
+        cada mês. Nada aqui é o fechamento.
+      </p>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:4px;">
+        <div>
+          <div class="lbl">Gasto até o dia 15</div>
+          <div class="big">R$ 3.180</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="lbl">Julho, mesmo período</div>
+          <div style="font-size:15px;color:var(--dim);font-variant-numeric:tabular-nums;">R$ 2.760</div>
+        </div>
+      </div>
+      <div style="font-size:12px;" class="up">+R$ 420 · +15,2%</div>
+    </div>
+
+    <div class="card" id="cats"></div>
+
+    <p class="note">
+      Ordenado pelo que mais mudou em <b>reais</b>, não em porcentagem: 200% de aumento
+      num gasto de R$ 3 não é notícia.
+    </p>
+
+    <!-- ============ média de 3 meses ============ -->
+    <h2>Média dos últimos meses</h2>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px;">
+        <div>
+          <div class="lbl">Média mensal</div>
+          <div class="big">R$ 5.940</div>
+        </div>
+        <div class="lbl" style="text-align:right;line-height:1.5;">
+          jul · jun · mai<br><span style="color:var(--faint)">3 meses fechados</span>
+        </div>
+      </div>
+      <div id="avg"></div>
+    </div>
+    <p class="note">
+      Mês sem lançamento nenhum fica fora da média — quase sempre significa "não
+      registrei", não "não gastei". E não há comparação da média com agosto de
+      propósito: no dia 15, estar abaixo da média é sempre verdade e nunca útil.
+    </p>
+
+    <!-- ============ assinaturas ============ -->
+    <h2>Custo fixo recorrente</h2>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px;">
+        <div>
+          <div class="lbl">Por mês, hoje</div>
+          <div class="big">R$ 264,70</div>
+        </div>
+        <div class="lbl" style="text-align:right;">6 cobranças<br>ativas</div>
+      </div>
+      <div id="subs"></div>
+
+      <details>
+        <summary>2 que pararam de aparecer</summary>
+        <div id="subsOff"></div>
+      </details>
+    </div>
+    <p class="note">
+      Detectado do seu próprio extrato: mesmo comerciante, valor estável, 3 meses ou
+      mais. O que parou de cobrar sai do total — senão o "custo fixo" mentiria pra cima.
+    </p>
+
+    <!-- ============ maiores gastos ============ -->
+    <h2>Maiores gastos de agosto</h2>
+    <div class="card" id="top"></div>
+    <p class="note" id="topNote"></p>
+
+    <!-- ============ health score ============ -->
+    <h2>Sua nota do mês</h2>
+    <div class="card">
+      <div class="score">
+        <div class="dial">
+          <svg width="62" height="62" viewBox="0 0 62 62">
+            <circle cx="31" cy="31" r="26" fill="none" stroke="#2b323c" stroke-width="6"
+                    stroke-dasharray="122 163" stroke-linecap="round"/>
+            <!-- 78% do arco de 122: 95. O número e o arco têm que sair da mesma
+                 conta do breakdown abaixo — o protótipo original mostrava 78 com
+                 um breakdown que dava outra coisa, e isso está registrado no
+                 CLAUDE.md como número inventado de mockup. -->
+            <circle cx="31" cy="31" r="26" fill="none" stroke="#e8a33d" stroke-width="6"
+                    stroke-dasharray="95 163" stroke-linecap="round"/>
+          </svg>
+          <div class="num">78</div>
+        </div>
+        <div style="flex:1;">
+          <span class="tag">atenção</span>
+          <p style="font-size:11.5px;color:var(--dim);margin:7px 0 0;line-height:1.5;">
+            Média das notas por bucket, com o peso dos seus percentuais 50-30-20.
+          </p>
+        </div>
+      </div>
+
+      <details open>
+        <summary>Como esse número foi feito</summary>
+        <div id="health"></div>
+        <p class="note" id="healthMath"></p>
+      </details>
+
+      <div class="row" style="border-top:1px solid #22272f;margin-top:6px;">
+        <div style="flex:1;">
+          <div class="name" style="color:var(--dim);">Sem categoria</div>
+          <div class="sub">não entra em bucket nenhum, então não pontua nem pune</div>
+        </div>
+        <div class="val" style="color:var(--dim);">R$ 190</div>
+      </div>
+    </div>
+
+    <!-- ============ o que falta decidir ============ -->
+    <h2>Ainda não existe</h2>
+    <div class="todo">
+      <h3>Sugestão prática</h3>
+      <p>
+        O esboço original prometia uma frase do tipo <em>"corte R$ 150 em delivery e você
+        bate a meta de poupança"</em>. A conta é possível com o que já existe — teto do
+        bucket, gasto atual e meta de poupança —, mas não é nenhum dos 5 endpoints da
+        spec 09. Vira feature nova, e precisa de decisão antes de virar código.
+      </p>
+    </div>
+    <div class="todo" style="border-color:#3a3f49;background:#1d2026;">
+      <h3 style="color:var(--dim);">Projeção de fechamento</h3>
+      <p style="color:#9aa0a8;">
+        Existe no motor da spec 07 e já vira notificação a partir do dia 7, mas não tem
+        endpoint de leitura. Mostrar aqui é uma linha de backend — decidir se cabe nesta
+        tela ou se é só alerta.
+      </p>
+    </div>
+
+  </div>
+
+  <div class="tabs">
+    <div>Início</div><div>Atividade</div><div aria-current="true">Insights</div><div>Metas</div>
+  </div>
+
+ </div>
+</div>
+
+<p class="legend">
+  Desenhado sobre os 5 endpoints reais: <code>/insights/month-over-month</code>,
+  <code>recurring-subscriptions</code>, <code>top-transactions</code>,
+  <code>three-month-average</code> e <code>health-score-breakdown</code>.
+  Valores são <b>ilustrativos</b> numa escala realista; os padrões de assinatura
+  (estacionamento de valor baixo, pedágio de R$ 5,90 recorrente em 7 meses) foram de
+  fato detectados no extrato real. Comerciantes fictícios.
+</p>
+
+<script>
+(function () {
+  function fmt(v) {
+    return 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function el(html) {
+    var d = document.createElement('div');
+    d.innerHTML = html.trim();
+    return d.firstChild;
+  }
+
+  // ---- mês a mês por categoria: ordenado por variação em reais ----
+  var CATS = [
+    ['Mercado', 980, 620],
+    ['Delivery', 410, 180],
+    ['Transporte', 190, 300],
+    ['Moradia', 1200, 1200],
+    ['Lazer', 240, 190],
+    ['Compras', 160, 270]
+  ];
+  var peak = Math.max.apply(null, CATS.map(function (c) { return Math.max(c[1], c[2]); }));
+
+  CATS.map(function (c) { return { name: c[0], now: c[1], before: c[2], delta: c[1] - c[2] }; })
+    .sort(function (a, b) { return Math.abs(b.delta) - Math.abs(a.delta); })
+    .forEach(function (c) {
+      var dir = c.delta > 0 ? 'up' : c.delta < 0 ? 'down' : 'flat';
+      var sign = c.delta > 0 ? '+' : '';
+      // Sem variação não mostra "0%": junto do "—" da coluna de reais ficava
+      // dizendo duas coisas diferentes sobre o mesmo nada.
+      var pct = c.delta === 0 ? '' : c.before > 0 ? sign + Math.round(c.delta / c.before * 100) + '%' : '—';
+      document.getElementById('cats').appendChild(el(
+        '<div class="row">' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div class="name">' + c.name + '</div>' +
+            '<div class="sub">' + fmt(c.before) + ' → ' + fmt(c.now) + '</div>' +
+          '</div>' +
+          '<div class="bars">' +
+            '<div class="bar"><span style="width:' + (c.now / peak * 100) + '%"></span></div>' +
+            '<div class="bar prev"><span style="width:' + (c.before / peak * 100) + '%"></span></div>' +
+          '</div>' +
+          '<div class="chg ' + dir + '">' + (c.delta === 0 ? '—' : sign + fmt(c.delta).replace('R$ ', '')) +
+            '<div class="sub ' + dir + '" style="color:inherit;opacity:.75">' + pct + '</div>' +
+          '</div>' +
+        '</div>'
+      ));
+    });
+
+  // ---- média por bucket (poupança fora: é meta, não gasto) ----
+  [['Necessidades', 3620], ['Desejos', 2320]].forEach(function (b) {
+    document.getElementById('avg').appendChild(el(
+      '<div class="row"><div class="name" style="flex:1">' + b[0] + '</div>' +
+      '<div class="val">' + fmt(b[1]) + '</div></div>'
+    ));
+  });
+
+  // ---- assinaturas ----
+  var SUBS = [
+    ['Plano de saúde Vitalis', 'Contas', 128.90, 6, true],
+    ['Streaming Cineclube', 'Streaming', 44.90, 5, true],
+    ['Academia Norte', 'Lazer', 59.00, 4, true],
+    ['Estacionamento Praça', 'Transporte', 14.00, 6, true],
+    ['Pedágio via Oeste', 'Transporte', 5.90, 7, true],
+    ['Nuvem de fotos', 'Compras', 12.00, 3, true],
+    ['Revista Mensal', 'Lazer', 22.00, 3, false],
+    ['Streaming Antigo', 'Streaming', 19.90, 4, false]
+  ];
+  SUBS.forEach(function (s) {
+    var row = el(
+      '<div class="row">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div class="name">' + s[0] + '</div>' +
+          '<div class="sub">' + s[1] + ' · visto em ' + s[3] + ' meses</div>' +
+        '</div>' +
+        '<div class="val"' + (s[4] ? '' : ' style="color:var(--faint)"') + '>' + fmt(s[2]) + '</div>' +
+      '</div>'
+    );
+    document.getElementById(s[4] ? 'subs' : 'subsOff').appendChild(row);
+  });
+
+  // ---- maiores gastos: aporte fora, e rótulo pra sem descrição ----
+  var TOP = [
+    ['Aluguel Imobiliária Sul', 'Moradia', 1200.00, '01/08'],
+    [null, null, 890.00, '09/08'],          // sem descrição no extrato
+    ['Mercearia Vila Nova', 'Mercado', 312.40, '11/08'],
+    ['Cantina Dona Zita', 'Delivery', 148.00, '07/08'],
+    ['Ótica Clara Vista', 'Compras', 140.00, '13/08']
+  ];
+  TOP.forEach(function (t, i) {
+    document.getElementById('top').appendChild(el(
+      '<div class="row">' +
+        '<div class="rank">' + (i + 1) + '</div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div class="name' + (t[0] ? '' : ' nodesc') + '">' +
+            (t[0] || 'Lançamento sem descrição') + '</div>' +
+          '<div class="sub">' + (t[1] || 'toque para categorizar') + ' · ' + t[3] + '</div>' +
+        '</div>' +
+        '<div class="val">' + fmt(t[2]) + '</div>' +
+      '</div>'
+    ));
+  });
+  document.getElementById('topNote').innerHTML =
+    'Aporte em poupança fica fora: <b>R$ 1.200</b> investidos neste mês não são gasto, e ' +
+    'apareceriam no topo da lista. O extrato do banco às vezes vem sem descrição — aqui ' +
+    'isso é dito, em vez de virar uma linha em branco.';
+
+  // ---- breakdown do health score ----
+  var HEALTH = [
+    ['Necessidades', 'teto', 3180, 4000, 100, 50],
+    ['Desejos', 'teto', 2870, 2400, 80, 30],
+    ['Poupança', 'meta', 320, 1600, 20, 20]
+  ];
+  HEALTH.forEach(function (h) {
+    var over = h[1] === 'teto' && h[2] > h[3];
+    var short = h[1] === 'meta' && h[2] < h[3];
+    document.getElementById('health').appendChild(el(
+      '<div class="row">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div class="name">' + h[0] + ' <span class="kind">' + h[1] + '</span></div>' +
+          '<div class="sub">' + fmt(h[2]) + ' de ' + fmt(h[3]) +
+            (over ? ' · <span class="up">acima do teto</span>' : '') +
+            (short ? ' · <span class="up">faltando</span>' : '') +
+            '</div>' +
+        '</div>' +
+        '<div class="chg">' + h[4] +
+          '<div class="sub">peso ' + h[5] + '%</div>' +
+        '</div>' +
+      '</div>'
+    ));
+  });
+
+  // Fecha a conta na tela em vez de escrever o número à mão: é a única forma de o
+  // mostrador não divergir do breakdown logo abaixo dele. A 1ª versão desta tela
+  // mostrava 69 com um breakdown que dava 78, repetindo o erro que o CLAUDE.md
+  // registra sobre o protótipo original.
+  var weighted = HEALTH.reduce(function (sum, h) { return sum + h[4] * h[5]; }, 0);
+  var weight = HEALTH.reduce(function (sum, h) { return sum + h[5]; }, 0);
+  var score = Math.round(weighted / weight);
+
+  document.getElementById('healthMath').innerHTML =
+    '(' + HEALTH.map(function (h) { return h[4] + '×' + h[5]; }).join(' + ') +
+    ') ÷ ' + weight + ' = <b>' + score + '</b>';
+  document.querySelector('.dial .num').textContent = score;
+  document.querySelector('.dial circle:last-of-type')
+    .setAttribute('stroke-dasharray', Math.round(122 * score / 100) + ' 163');
+
+  // Faixas do backend: >=80 saudavel, >=60 atencao, senao risco.
+  var tag = document.querySelector('.score .tag');
+  if (score >= 80) { tag.textContent = 'saudável'; tag.className = 'tag ok'; }
+  else if (score >= 60) { tag.textContent = 'atenção'; tag.className = 'tag'; }
+  else { tag.textContent = 'risco'; tag.className = 'tag risk'; }
+})();
+</script>
+</body>
+</html>

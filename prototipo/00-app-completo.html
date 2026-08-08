@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grana — protótipo do app completo</title>
+<!--
+  PROTÓTIPO CONSOLIDADO. Substitui a navegação entre os arquivos 01..14 por uma
+  visão única e navegável do app inteiro.
+
+  A diferença em relação aos arquivos soltos: aqui cada tela vem com o **status
+  real** e com os endpoints que ela consome. Os protótipos 04-10 são da sessão de
+  planejamento e descrevem um app que em parte não existe (e em parte já mudou);
+  este arquivo é o retrato do que está de fato construído em 08/08/2026.
+
+  NÃO cobre 01-03 (onboarding de apresentação). Aquelas três telas de boas-vindas
+  nunca foram construídas: o app abre direto no cadastro. Ficam como lacuna
+  conhecida, não como coisa esquecida.
+
+  Legenda de status:
+    ✅ implementada  — existe em apps/mobile e consome API real
+    🟡 backend pronto — endpoints existem, tela não foi escrita
+    ⏳ não existe     — depende de decisão ou de infra que falta
+
+  Textos das telas implementadas foram tirados do código, não inventados.
+  Valores são ilustrativos; comerciantes são fictícios, porque o extrato usado
+  pra validar é gasto pessoal do usuário.
+
+  Sem CDN: o CSP do Artifact bloqueia host externo, então ícone é SVG inline.
+-->
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --page: #2b2e33; --bg: #14171c; --surface: #1c2028; --raised: #232832;
+    --line: #262b33; --text: #eef0f3; --soft: #cfd3d9; --dim: #8a8f98;
+    --faint: #5c626b; --accent: #e8a33d; --ink: #2a1c04; --good: #5dcaa5;
+    --bad: #d85a30;
+  }
+  body {
+    margin: 0; padding: 24px 16px 60px; background: var(--page); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  header { max-width: 620px; text-align: center; }
+  header h1 { font-size: 19px; font-weight: 500; margin: 0 0 5px; letter-spacing: -.01em; }
+  header p { font-size: 12px; color: var(--dim); margin: 0; line-height: 1.55; }
+
+  /* ---- navegação ---- */
+  .nav { max-width: 620px; display: flex; flex-direction: column; gap: 7px; }
+  .group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .group > b {
+    font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+    font-weight: 500; width: 74px; text-align: right;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .nav button {
+    background: var(--surface); color: var(--dim); border: 1px solid #363c46;
+    border-radius: 16px; padding: 5px 11px; font-size: 11.5px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .nav button[aria-current="true"] { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .dot.done { background: var(--good); }
+  .dot.api { background: var(--accent); }
+  .dot.none { background: #4b535f; }
+
+  /* ---- aparelho ---- */
+  .frame {
+    width: 390px; max-width: 100%; background: var(--bg); border-radius: 28px;
+    overflow: hidden; border: 6px solid #05070a;
+  }
+  .scroll { max-height: 720px; overflow-y: auto; }
+  .s { display: none; }
+  .s[data-on="1"] { display: block; }
+
+  /* ---- painel de contexto ---- */
+  .info {
+    width: 620px; max-width: 100%; background: #21242a; border: 1px solid #33383f;
+    border-radius: 14px; padding: 14px 16px;
+  }
+  .info h2 { font-size: 14px; font-weight: 500; margin: 0 0 3px; }
+  .info .st { font-size: 11px; margin: 0 0 10px; }
+  .info .st.done { color: var(--good); }
+  .info .st.api { color: var(--accent); }
+  .info .st.none { color: var(--dim); }
+  .info p { font-size: 12px; color: #a8aeb6; line-height: 1.55; margin: 0 0 8px; }
+  .info p:last-child { margin-bottom: 0; }
+  .info code {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10.5px;
+    background: #2b2f36; border-radius: 4px; padding: 1px 5px; color: var(--soft);
+  }
+  .info b { color: var(--soft); font-weight: 500; }
+
+  /* ---- componentes de tela ---- */
+  .bar { padding: 1rem 1.05rem .55rem; display: flex; justify-content: space-between; align-items: center; }
+  .bar .t { font-size: 15px; font-weight: 500; }
+  .bar .side { width: 66px; color: var(--dim); font-size: 12.5px; }
+  .bar .side.r { text-align: right; }
+  .pad { padding: .3rem 1.05rem 1.3rem; }
+
+  h3.sec {
+    font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+    font-weight: 500; margin: 18px 0 8px; font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .card { background: var(--surface); border-radius: 12px; padding: 12px 13px; }
+  .card + .card { margin-top: 8px; }
+  .big { font-size: 25px; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .lbl { font-size: 10.5px; color: var(--dim); }
+  .sub { font-size: 12px; color: var(--dim); line-height: 1.5; margin: 0 0 12px; }
+  .note { font-size: 10.5px; color: var(--faint); line-height: 1.5; margin: 10px 0 0; }
+
+  .row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid #22272f; }
+  .row:last-child { border-bottom: none; }
+  .row .nm { flex: 1; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .mt { font-size: 10px; color: var(--faint); margin-top: 1px; }
+  .row .vl { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+  .track { height: 6px; background: #2b323c; border-radius: 4px; overflow: hidden; }
+  .fill { height: 6px; background: var(--accent); border-radius: 4px; }
+  .fill.g { background: var(--good); }
+  .fill.r { background: var(--bad); }
+
+  .cta {
+    width: 100%; background: var(--accent); color: var(--ink); border: none;
+    border-radius: 11px; padding: 12px 0; font-size: 13.5px; font-weight: 500; margin-top: 8px;
+  }
+  .cta.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); }
+  .chip {
+    background: var(--raised); color: var(--soft); border: 1px solid var(--line);
+    border-radius: 16px; padding: 5px 10px; font-size: 10.5px; display: inline-block;
+  }
+  .chip.on { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; }
+
+  .field {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 11px 12px; font-size: 12.5px; color: var(--soft); margin-bottom: 8px;
+  }
+  .field.ph { color: var(--faint); }
+
+  .tabs { display: flex; border-top: 1px solid var(--line); background: #171a1f; }
+  .tabs div { flex: 1; text-align: center; padding: 9px 0 11px; font-size: 9.5px; color: var(--faint); }
+  .tabs div[aria-current="true"] { color: var(--accent); }
+
+  .tag { display: inline-block; font-size: 9.5px; border-radius: 10px; padding: 2px 7px; background: var(--accent); color: var(--ink); }
+  .tag.ok { background: var(--good); color: #08251b; }
+  .warnbox {
+    background: #221d14; border: 1px solid #3d3320; border-radius: 10px;
+    padding: 9px 11px; font-size: 10.5px; color: #e0c79a; line-height: 1.45; margin-bottom: 10px;
+  }
+  .ghostbox {
+    border: 1px dashed #4a4f59; border-radius: 12px; padding: 20px 14px; text-align: center;
+    color: var(--faint); font-size: 11.5px; line-height: 1.6;
+  }
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .keys div {
+    background: var(--surface); border-radius: 10px; padding: 11px 0; text-align: center; font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Grana — o app como ele está hoje</h1>
+  <p>
+    Retrato do que está construído em 08/08/2026. Cada tela traz o status real e os
+    endpoints que consome.<br>
+    <span style="color:var(--faint)">Não cobre <b style="color:var(--dim)">01–03</b>
+    (onboarding de apresentação): aquelas três telas de boas-vindas nunca foram
+    construídas, e hoje o app abre direto no cadastro.</span>
+  </p>
+</header>
+
+<div class="nav" id="nav"></div>
+<div class="frame"><div class="scroll" id="stage"></div></div>
+<div class="info" id="info"></div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  function bar(left, title, right) {
+    return '<div class="bar"><span class="side">' + (left || '') + '</span>' +
+           '<span class="t">' + title + '</span>' +
+           '<span class="side r">' + (right || '') + '</span></div>';
+  }
+  function tabs(active) {
+    return '<div class="tabs">' + ['Início', 'Atividade', 'Insights', 'Metas'].map(function (t) {
+      return '<div' + (t === active ? ' aria-current="true"' : '') + '>' + t + '</div>';
+    }).join('') + '</div>';
+  }
+  function row(name, meta, value, extra) {
+    return '<div class="row"><div style="flex:1;min-width:0">' +
+           '<div class="nm"' + (extra || '') + '>' + name + '</div>' +
+           (meta ? '<div class="mt">' + meta + '</div>' : '') +
+           '</div><div class="vl">' + (value || '') + '</div></div>';
+  }
+  function bucket(name, spent, target, pct, kind) {
+    return '<div style="margin-bottom:11px">' +
+      '<div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:5px">' +
+        '<span>' + name + '</span><span style="color:var(--dim);font-variant-numeric:tabular-nums">' +
+        spent + ' / ' + target + '</span></div>' +
+      '<div class="track"><div class="fill ' + (kind || '') + '" style="width:' + pct + '%"></div></div></div>';
+  }
+
+  // ======================================================================
+  // As telas. `endpoints` e `notes` alimentam o painel de contexto.
+  // ======================================================================
+  var SCREENS = [
+    // ---------------------------------------------------------------- entrada
+    {
+      id: 'cadastro', group: 'Entrada', label: 'Cadastro', status: 'done',
+      endpoints: ['supabase.auth.signUp', 'Google OAuth (PKCE)'],
+      notes: 'Consentimento LGPD grava <code>terms_accepted_at</code> e ' +
+        '<code>terms_version</code>. O fluxo OAuth usa <b>PKCE</b>, o que exige o Redirect ' +
+        'URL <code>grana://</code> sem path na allow-list do Supabase — já configurado. ' +
+        'Apple Sign-In ficou em backlog: exige Apple Developer Program.',
+      html: bar('', 'Criar conta', '') + '<div class="pad">' +
+        '<p class="sub">Comece controlando seu mês em poucos minutos.</p>' +
+        '<div class="field ph">seu@email.com</div>' +
+        '<div class="field ph">senha</div>' +
+        '<div style="display:flex;gap:8px;align-items:flex-start;margin:12px 0 4px">' +
+          '<div style="width:16px;height:16px;border:1.5px solid var(--accent);border-radius:4px;flex:none;' +
+          'display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:11px">✓</div>' +
+          '<p style="font-size:10.5px;color:var(--dim);margin:0;line-height:1.5">Li e aceito os Termos de Uso e a ' +
+          'Política de Privacidade, e autorizo o tratamento dos meus dados financeiros.</p></div>' +
+        '<button class="cta">Criar conta</button>' +
+        '<button class="cta ghost">Continuar com Google</button>' +
+        '<p class="note">Já tem conta? Entrar</p></div>'
+    },
+    {
+      id: 'login', group: 'Entrada', label: 'Login', status: 'done',
+      endpoints: ['supabase.auth.signInWithPassword', 'Google OAuth (PKCE)'],
+      notes: 'Recuperação de senha usa o mesmo fluxo PKCE (<code>exchangeCodeForSession</code>). ' +
+        'A primeira versão lia o token do fragmento da URL com <code>Linking.parse()</code>, ' +
+        'que <b>ignora o fragmento</b> — o login por link nunca completava.',
+      html: bar('', 'Entrar', '') + '<div class="pad">' +
+        '<div class="field ph">seu@email.com</div><div class="field ph">senha</div>' +
+        '<button class="cta">Entrar</button>' +
+        '<button class="cta ghost">Continuar com Google</button>' +
+        '<p class="note">Esqueci minha senha</p></div>'
+    },
+    // ------------------------------------------------------------- onboarding
+    {
+      id: 'perfil', group: 'Onboarding', label: 'Perfil de renda', status: 'done',
+      endpoints: ['POST /onboarding'],
+      notes: 'Define o multiplicador da reserva: <b>6 meses</b> para CLT, <b>12</b> para ' +
+        'autônomo. Onboarding é <b>pulável</b>; a Home mostra um card "informe sua renda" ' +
+        'enquanto não houver renda vigente.',
+      html: bar('Pular', 'Sobre sua renda', '1/2') + '<div class="pad">' +
+        '<p class="sub">Isso define o tamanho da sua reserva de emergência.</p>' +
+        '<div class="card" style="border:1px solid var(--accent)">' +
+          '<div style="font-size:13.5px;font-weight:500">CLT</div>' +
+          '<div class="lbl" style="margin-top:3px">Renda fixa todo mês. Reserva de 6 meses.</div></div>' +
+        '<div class="card"><div style="font-size:13.5px;font-weight:500">Autônomo</div>' +
+          '<div class="lbl" style="margin-top:3px">Renda que varia. Reserva de 12 meses.</div></div>' +
+        '<button class="cta">Continuar</button></div>'
+    },
+    {
+      id: 'renda', group: 'Onboarding', label: 'Renda', status: 'done',
+      endpoints: ['POST /onboarding', 'GET|POST /incomes'],
+      notes: 'Renda é <b>declaração com vigência</b>, não valor por mês: uma linha significa ' +
+        '"a partir deste mês minha renda é X", e vale até uma declaração mais nova. Filtrar ' +
+        'por igualdade de mês zeraria as metas todo dia 1. O campo guarda <b>centavos como ' +
+        'dígitos</b>, nunca float.',
+      html: bar('Voltar', 'Sua renda', '2/2') + '<div class="pad">' +
+        '<p class="sub">Quanto entra por mês, líquido. Dá pra mudar depois.</p>' +
+        '<p style="text-align:center;font-size:30px;font-weight:500;margin:18px 0">R$ 8.000,00</p>' +
+        '<div class="keys">' + [1,2,3,4,5,6,7,8,9,'00',0,'⌫'].map(function (k) {
+          return '<div>' + k + '</div>'; }).join('') + '</div>' +
+        '<button class="cta">Concluir</button>' +
+        '<p class="note">A renda é gravada por último de propósito: como o onboarding ' +
+        '"concluído" deriva dela, falha num passo anterior traz você de volta em vez de ' +
+        'deixar a reserva faltando pra sempre.</p></div>'
+    },
+    // ------------------------------------------------------------------- app
+    {
+      id: 'inicio', group: 'App', label: 'Início', status: 'done',
+      endpoints: ['GET /dashboard/summary', 'GET /notifications'],
+      notes: 'Cada chamada é <b>independente</b>: com <code>Promise.all</code>, uma falha ' +
+        'isolada apagava saldo, buckets e health score junto. <b>"Saiu" é consumo, não saída ' +
+        'total</b> — aporte em poupança aparece à parte, senão quem cumpre o 50-30-20 levaria ' +
+        'alerta de risco todo mês. Distribuição saiu como barras, não donut: donut exigiria ' +
+        '<code>react-native-svg</code>.',
+      html: '<div class="bar"><div><div style="font-size:15px;font-weight:500">Grana</div>' +
+        '<div class="lbl" style="margin-top:2px">Agosto</div></div>' +
+        '<div style="position:relative"><span style="font-size:16px">🔔</span>' +
+        '<span style="position:absolute;top:-2px;right:-4px;background:var(--bad);color:#fff;' +
+        'font-size:8px;border-radius:8px;padding:0 4px">2</span></div></div>' +
+        '<div class="pad">' +
+        '<div class="card"><div style="display:flex;justify-content:space-between">' +
+          '<div><div class="lbl">Entrou</div><div style="font-size:16px;color:var(--good);' +
+          'font-variant-numeric:tabular-nums">R$ 8.000,00</div></div>' +
+          '<div><div class="lbl">Saiu</div><div style="font-size:16px;font-variant-numeric:tabular-nums">' +
+          'R$ 6.130,00</div></div>' +
+          '<div><div class="lbl">Investido</div><div style="font-size:16px;color:var(--accent);' +
+          'font-variant-numeric:tabular-nums">R$ 1.200,00</div></div></div></div>' +
+        '<h3 class="sec">Saúde financeira</h3>' +
+        '<div class="card" style="display:flex;align-items:center;gap:13px">' +
+          '<div style="font-size:27px;font-weight:500">78</div>' +
+          '<div><span class="tag">atenção</span>' +
+          '<div class="lbl" style="margin-top:5px">Média por bucket, com o peso dos seus 50-30-20</div></div></div>' +
+        '<h3 class="sec">Regra 50-30-20</h3><div class="card">' +
+          bucket('Necessidades', 'R$ 3.180', 'R$ 4.000', 79) +
+          bucket('Desejos', 'R$ 2.870', 'R$ 2.400', 100, 'r') +
+          bucket('Poupança', 'R$ 1.200', 'R$ 1.600', 75, 'g') +
+        '</div>' +
+        '<h3 class="sec">Onde você gastou</h3><div class="card">' +
+          bucket('Moradia', 'R$ 1.200', '', 100) +
+          bucket('Mercado', 'R$ 980', '', 82) +
+          bucket('Delivery', 'R$ 410', '', 34) +
+          row('Sem categoria', 'não entra em bucket nenhum', 'R$ 190') +
+        '</div>' +
+        '<button class="cta">Adicionar lançamento</button></div>' + tabs('Início')
+    },
+    {
+      id: 'atividade', group: 'App', label: 'Atividade', status: 'done',
+      endpoints: ['GET /transactions?month=&cursor='],
+      notes: 'Paginação <b>keyset</b> por <code>(occurred_at, id)</code>. A primeira versão ' +
+        'truncava silenciosamente em 30 lançamentos; agora existe "Carregar mais" usando o ' +
+        'cursor, porque esconder gasto sem avisar é o pior defeito possível aqui.',
+      html: bar('', 'Atividade', 'Agosto') + '<div class="pad">' +
+        '<h3 class="sec">Hoje</h3><div class="card">' +
+          row('Mercearia Vila Nova', 'Mercado', '− R$ 312,40') +
+          row('Cantina Dona Zita', 'Delivery', '− R$ 48,00') +
+        '</div>' +
+        '<h3 class="sec">Ontem</h3><div class="card">' +
+          row('Salário', 'Receita', '+ R$ 8.000,00') +
+          row('Aluguel Imobiliária Sul', 'Moradia · parcela 1/1', '− R$ 1.200,00') +
+        '</div>' +
+        '<h3 class="sec">11/08</h3><div class="card">' +
+          row('Pedágio via Oeste', 'Transporte · importado do extrato', '− R$ 5,90') +
+          row('Lançamento sem descrição', 'toque para categorizar', '− R$ 890,00',
+              ' style="color:var(--faint);font-style:italic"') +
+        '</div>' +
+        '<button class="cta ghost">Carregar mais lançamentos</button></div>' + tabs('Atividade')
+    },
+    {
+      id: 'notificacoes', group: 'App', label: 'Notificações', status: 'done',
+      endpoints: ['GET /notifications', 'PATCH /notifications/{id}/read'],
+      notes: '<code>unread_count</code> é contado <b>à parte</b>, não sobre a página — a ' +
+        'primeira versão limitava o badge ao tamanho da página. Alerta de risco é ' +
+        '<b>reconciliado</b>: se a regra deixou de valer (você corrigiu o valor, apagou o ' +
+        'gasto), o alerta não lido é apagado, senão fica uma informação falsa na tela. ' +
+        '<code>goal_hit</code> e marco de reserva <b>nunca</b> são retirados: são conquista.',
+      html: bar('Voltar', 'Notificações', '2 novas') + '<div class="pad">' +
+        '<div class="card" style="border-left:3px solid var(--bad)">' +
+          '<div style="font-size:12.5px;font-weight:500">Projeção de fechamento em risco</div>' +
+          '<div class="lbl" style="margin-top:4px;line-height:1.5">No ritmo atual, você deve ' +
+          'fechar o mês gastando R$ 8.240,00 (103% da renda).</div></div>' +
+        '<div class="card" style="border-left:3px solid var(--accent)">' +
+          '<div style="font-size:12.5px;font-weight:500">Você está perto do teto de Desejos</div>' +
+          '<div class="lbl" style="margin-top:4px;line-height:1.5">Já usou 119% do limite de ' +
+          'Desejos neste mês (R$ 2.870,00 de R$ 2.400,00).</div></div>' +
+        '<div class="card" style="opacity:.6">' +
+          '<div style="font-size:12.5px;font-weight:500">3 meses de reserva</div>' +
+          '<div class="lbl" style="margin-top:4px">Sua reserva já cobre 3 meses do seu gasto essencial.</div></div>' +
+        '<div class="card" style="opacity:.6">' +
+          '<div style="font-size:12.5px;font-weight:500">Meta de Necessidades batida em julho</div>' +
+          '<div class="lbl" style="margin-top:4px">Você fechou julho dentro do teto.</div></div>' +
+        '<p class="note">Marcar como lida libera a chave de idempotência do motor, de propósito: ' +
+        'o mesmo alerta pode voltar se a situação persistir.</p></div>'
+    },
+    // -------------------------------------------------------------- registro
+    {
+      id: 'adicionar', group: 'Registro', label: 'Adicionar', status: 'done',
+      endpoints: ['POST /transactions', 'GET /categories'],
+      notes: 'Teclado de centavos: o valor preenche da direita, sem vírgula. <b>Parcelamento ' +
+        'expande no backend</b> — o cliente manda o valor cheio e <code>installment_total</code>, ' +
+        'e o servidor cria uma transação por mês. A primeira versão aceitava ' +
+        '<code>installment_number</code> do cliente e <b>perdia 11 de 12 parcelas</b>, deixando ' +
+        'os meses seguintes falsamente livres.',
+      html: bar('Cancelar', 'Novo lançamento', '') + '<div class="pad">' +
+        '<div style="display:flex;background:var(--surface);border-radius:20px;padding:3px;margin-bottom:14px">' +
+          '<div style="flex:1;text-align:center;background:#f5f6f8;color:#14171c;border-radius:18px;' +
+          'padding:6px 0;font-size:11.5px">Despesa</div>' +
+          '<div style="flex:1;text-align:center;color:var(--dim);padding:6px 0;font-size:11.5px">Receita</div>' +
+          '<div style="flex:1;text-align:center;color:var(--dim);padding:6px 0;font-size:11.5px">Transferência</div></div>' +
+        '<p style="text-align:center;font-size:29px;font-weight:500;margin:0 0 13px">R$ 312,40</p>' +
+        '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+          '<button class="cta ghost" style="margin:0">Escanear recibo</button>' +
+          '<button class="cta ghost" style="margin:0">Importar extrato</button></div>' +
+        '<div class="lbl" style="margin-bottom:7px">Categoria (obrigatória)</div>' +
+        '<div class="chips" style="margin-bottom:13px">' +
+          ['Moradia','Mercado','Contas','Transporte','Lazer','Compras','Delivery','Streaming','Investimentos']
+            .map(function (c, i) { return '<span class="chip' + (i === 1 ? ' on' : '') + '">' + c + '</span>'; }).join('') +
+        '</div>' +
+        '<div class="chips" style="margin-bottom:13px">' +
+          '<span class="chip">Hoje</span><span class="chip">Onde</span><span class="chip">À vista</span></div>' +
+        '<div class="keys">' + [1,2,3,4,5,6,7,8,9,'00',0,'⌫'].map(function (k) {
+          return '<div>' + k + '</div>'; }).join('') + '</div>' +
+        '<button class="cta">Salvar</button></div>'
+    },
+    {
+      id: 'recibo', group: 'Registro', label: 'Recibo (OCR)', status: 'done',
+      endpoints: ['POST /receipts', 'GET /receipts/{id}', 'POST /receipts/{id}/confirm'],
+      notes: 'Foto → upload → <b>poll a cada 1,5s</b>, teto de 20 tentativas → revisão. ' +
+        '<b>Falha no poll não volta pra tela de foto</b>: a imagem já subiu e o OCR já rodou, ' +
+        'então refotografar duplicaria o recibo e gastaria outro crédito do Mindee (são 200). ' +
+        'Campo com confiança abaixo de 0,5 vem <b>vazio</b> — o app não chuta valor. Não tem ' +
+        'parcelamento de propósito: aceitar o total sem expandir repetiria o bug das parcelas.',
+      html: bar('Cancelar', 'Conferir recibo', '') + '<div class="pad">' +
+        '<div style="height:110px;background:var(--surface);border-radius:12px;display:flex;' +
+        'align-items:center;justify-content:center;color:var(--faint);font-size:11.5px;margin-bottom:12px">' +
+        'foto do recibo</div>' +
+        '<div class="warnbox">Não conseguimos ler o valor com segurança. Confira antes de salvar.</div>' +
+        '<div class="lbl">Valor</div><div class="field">R$ 312,40</div>' +
+        '<div class="lbl">Comerciante</div><div class="field">MERCEARIA VILA NOVA</div>' +
+        '<div class="lbl">Data</div><div class="field">15/08/2026</div>' +
+        '<div class="lbl" style="margin-bottom:7px">Categoria</div>' +
+        '<div class="chips">' + ['Mercado','Delivery','Compras'].map(function (c, i) {
+          return '<span class="chip' + (i === 0 ? ' on' : '') + '">' + c + '</span>'; }).join('') + '</div>' +
+        '<button class="cta">Salvar lançamento</button></div>'
+    },
+    {
+      id: 'importar', group: 'Registro', label: 'Importar extrato', status: 'done',
+      endpoints: ['POST /transactions/import (month)', 'POST /transactions/import/confirm'],
+      notes: 'Bandeja por categoria: escolhe a categoria e marca tudo que pertence a ela. ' +
+        'Valida <b>um mês por vez</b> e cada escolha vira regra — no extrato real de 12 meses, ' +
+        '27 decisões no 1º mês e 8–29 nos seguintes, com 70–92% já pronto. <b>Total 217 em ' +
+        'qualquer ordem</b>: aprender não cobra a mais. Sem memória, mês a mês custaria mais ' +
+        'que o dobro. Detalhe completo em <b>12-</b> e <b>13-import-variantes.html</b>.',
+      html: bar('Voltar', 'Dezembro', 'mês 1/12') + '<div class="pad">' +
+        '<div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);margin-bottom:5px">' +
+          '<span>7 de 102 lançamentos resolvidos</span><span>7%</span></div>' +
+        '<div class="track" style="margin-bottom:12px"><div class="fill" style="width:7%"></div></div>' +
+        '<p class="sub">Escolha uma categoria e marque tudo que pertence a ela.</p>' +
+        '<div class="chips" style="margin-bottom:11px">' +
+          ['Moradia','Mercado','Contas','Transporte','Lazer','Compras','Delivery','Streaming','Investimentos']
+            .map(function (c, i) { return '<span class="chip' + (i === 1 ? ' on' : '') + '">' + c + '</span>'; }).join('') +
+          '<span class="chip" style="border-style:dashed;color:var(--dim)">Decidir depois</span></div>' +
+        '<div class="card">' +
+          row('PIX ANA BEATRIZ', '8 lançamentos · R$ 2.400,00', '') +
+          row('MERCEARIA VILA NOVA', '7 lançamentos · R$ 1.183,25', '') +
+          row('BOLETO', '5 lançamentos · R$ 1.842,00 · confira', '') +
+          row('IFOOD *PEDIDO', '5 lançamentos · R$ 318,70 · Delivery', '✓') +
+        '</div>' +
+        '<button class="cta">Atribuir 2 a Mercado</button>' +
+        '<button class="cta ghost">Importar dezembro · 95 sem categoria</button>' +
+        '<p class="note">O ✕ tira do grupo o que não pertence, e o item vira uma decisão ' +
+        'própria — nunca desaparece.</p></div>'
+    },
+    // ------------------------------------------------------- insights e metas
+    {
+      id: 'insights', group: 'Insights', label: 'Insights', status: 'api',
+      endpoints: ['GET /insights/month-over-month', 'recurring-subscriptions',
+                  'top-transactions', 'three-month-average', 'health-score-breakdown'],
+      notes: 'Os 5 endpoints existem e estão testados; <b>a tela não foi escrita</b>. O desenho ' +
+        'completo está em <b>14-insights-v2.html</b>. Ponto central: o mês parcial precisa ' +
+        'aparecer, porque o backend compara os dois meses cortados no mesmo dia justamente pra ' +
+        'não anunciar economia falsa — se a tela não disser, o cuidado morre aqui.',
+      html: bar('', 'Insights', 'Agosto') + '<div class="pad">' +
+        '<div class="warnbox">Agosto ainda está em curso, então a comparação usa <b>os 15 ' +
+        'primeiros dias</b> de cada mês. Nada aqui é o fechamento.</div>' +
+        '<h3 class="sec">Mês a mês</h3><div class="card">' +
+          '<div class="lbl">Gasto até o dia 15</div><div class="big">R$ 3.180</div>' +
+          '<div style="font-size:11.5px;color:var(--bad);margin-top:3px">+R$ 420 · +15,2% vs julho</div></div>' +
+        '<div class="card">' + row('Mercado', 'R$ 620 → R$ 980', '+360') +
+          row('Delivery', 'R$ 180 → R$ 410', '+230') +
+          row('Transporte', 'R$ 300 → R$ 190', '−110') + '</div>' +
+        '<h3 class="sec">Custo fixo recorrente</h3><div class="card">' +
+          '<div class="lbl">Por mês, hoje</div><div class="big">R$ 264,70</div>' +
+          '<div style="margin-top:8px">' +
+          row('Plano de saúde Vitalis', 'Contas · visto em 6 meses', 'R$ 128,90') +
+          row('Pedágio via Oeste', 'Transporte · visto em 7 meses', 'R$ 5,90') + '</div></div>' +
+        '<h3 class="sec">Sua nota do mês</h3><div class="card">' +
+          '<div style="display:flex;align-items:center;gap:13px;margin-bottom:8px">' +
+          '<div style="font-size:26px;font-weight:500">78</div><span class="tag">atenção</span></div>' +
+          row('Necessidades <span class="chip" style="padding:0 5px">teto</span>', 'R$ 3.180 de R$ 4.000', '100') +
+          row('Desejos <span class="chip" style="padding:0 5px">teto</span>', 'R$ 2.870 de R$ 2.400 · acima', '80') +
+          row('Poupança <span class="chip" style="padding:0 5px">meta</span>', 'R$ 320 de R$ 1.600 · faltando', '20') +
+          '<p class="note">(100×50 + 80×30 + 20×20) ÷ 100 = <b>78</b></p></div>' +
+        '</div>' + tabs('Insights')
+    },
+    {
+      id: 'reserva', group: 'Insights', label: 'Reserva', status: 'api',
+      endpoints: ['GET /emergency-reserve', 'PATCH /emergency-reserve'],
+      notes: 'Backend pronto, tela não escrita. Alvo = <b>gasto em necessidades × 6 (CLT) ou ' +
+        '12 (autônomo)</b> — revisitado e mantido em 08/08. O saldo é <b>informado por você</b>: ' +
+        'derivar do bucket poupança misturaria investimento de longo prazo com colchão e diria ' +
+        'que você está coberto com dinheiro preso em ativo ilíquido. A sugestão de baseline vem ' +
+        'da média real de necessidades e <b>não sobrescreve</b> o valor guardado.',
+      html: bar('Voltar', 'Reserva de emergência', '') + '<div class="pad">' +
+        '<div class="card"><div class="lbl">Você tem hoje</div><div class="big">R$ 14.000,00</div>' +
+          '<div style="font-size:11.5px;color:var(--accent);margin:3px 0 10px">cobre 3,5 meses do seu essencial</div>' +
+          '<div class="track"><div class="fill g" style="width:58%"></div></div>' +
+          '<div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);margin-top:6px">' +
+          '<span>58% da meta</span><span>faltam R$ 10.000,00</span></div></div>' +
+        '<div class="card">' + row('Gasto essencial por mês', 'média de necessidades', 'R$ 4.000,00') +
+          row('Meses de colchão', 'perfil CLT', '6') +
+          row('Meta', '4.000 × 6', 'R$ 24.000,00') + '</div>' +
+        '<div class="warnbox" style="margin:10px 0 0">Seu gasto essencial nos últimos 3 meses ' +
+        'foi <b>R$ 4.600</b>. Atualizar a meta para R$ 27.600?</div>' +
+        '<button class="cta ghost">Informar novo saldo</button></div>'
+    },
+    {
+      id: 'metas', group: 'Insights', label: 'Metas', status: 'none',
+      endpoints: ['GET /gamification/progress — stub', 'GET /gamification/achievements — stub',
+                  'GET /roundup — stub'],
+      notes: '<b>Não existe.</b> Os três endpoints são <code>NotImplementedError</code>, e a ' +
+        'aba não foi criada porque seria uma aba vazia prometendo o que o app não faz. ' +
+        'Bloqueada por <b>uma decisão sua</b>: quanto do XP vem do hábito de registrar e ' +
+        'quanto vem de bater a meta real. O desenho antigo está em 08-metas.html.',
+      html: bar('', 'Metas', '') + '<div class="pad" style="padding-top:20px">' +
+        '<div class="ghostbox">Esta aba ainda não existe.<br><br>Depende da regra de XP ' +
+        'ser decidida: quanto vale registrar um gasto e quanto vale bater a meta do bucket.<br><br>' +
+        'Streak já foi reformulado como <b>dias ativos no mês</b>, sem quebra nem punição.<br><br>' +
+        'O cofrinho de arredondamento é <b>manual</b> nesta fase — automação real via ITP ' +
+        'depende de Open Finance, que está adiado.</div></div>' + tabs('Metas')
+    },
+    {
+      id: 'contas', group: 'Insights', label: 'Contas (banco)', status: 'none',
+      endpoints: ['nenhum — não implementar'],
+      notes: '<b>Adiada por barreira regulatória</b>, ver <code>docs/adr/0001</code>. Só ' +
+        'instituição autorizada pelo BCB pode receber dados no Open Finance, e em março/2026 o ' +
+        'BCB propôs restringir a rota de parceria que a Pluggy oferecia a empresas não ' +
+        'autorizadas. O código fica <b>dormente de propósito</b> (interface, MockProvider, ' +
+        'tabela <code>accounts</code>): custo zero e destrava rápido se a regra mudar. ' +
+        'Consequência: o produto tem <b>duas</b> vias de registro, não três, e o import de ' +
+        'extrato virou a única ponte com o banco.',
+      html: bar('', 'Conectar banco', '') + '<div class="pad" style="padding-top:20px">' +
+        '<div class="ghostbox">Conexão bancária automática está <b>fora do escopo</b>.<br><br>' +
+        'Não é limitação técnica: é regulatória. Receber dados via Open Finance exige ' +
+        'autorização do Banco Central.<br><br>A ponte com o banco é o <b>import de extrato ' +
+        'OFX</b>, que já funciona.</div></div>'
+    }
+  ];
+
+  // ======================================================================
+  var STATUS = {
+    done: ['✅ implementada', 'consome API real'],
+    api: ['🟡 backend pronto', 'endpoints existem, tela não escrita'],
+    none: ['⏳ não existe', 'depende de decisão ou de infra que falta']
+  };
+
+  var stage = $('stage'), nav = $('nav'), info = $('info');
+
+  SCREENS.forEach(function (s) {
+    var section = document.createElement('section');
+    section.className = 's';
+    section.dataset.id = s.id;
+    section.innerHTML = s.html;
+    stage.appendChild(section);
+  });
+
+  var groups = [];
+  SCREENS.forEach(function (s) { if (groups.indexOf(s.group) === -1) groups.push(s.group); });
+
+  groups.forEach(function (group) {
+    var line = document.createElement('div');
+    line.className = 'group';
+    line.innerHTML = '<b>' + group + '</b>';
+    SCREENS.filter(function (s) { return s.group === group; }).forEach(function (s) {
+      var b = document.createElement('button');
+      b.dataset.id = s.id;
+      b.innerHTML = '<span class="dot ' + s.status + '"></span>' + s.label;
+      b.addEventListener('click', function () { show(s.id); });
+      line.appendChild(b);
+    });
+    nav.appendChild(line);
+  });
+
+  function show(id) {
+    var screen = SCREENS.filter(function (s) { return s.id === id; })[0];
+
+    [].forEach.call(stage.children, function (node) {
+      node.dataset.on = node.dataset.id === id ? '1' : '';
+    });
+    nav.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-current', b.dataset.id === id ? 'true' : 'false');
+    });
+
+    info.innerHTML =
+      '<h2>' + screen.label + '</h2>' +
+      '<p class="st ' + screen.status + '">' + STATUS[screen.status][0] + ' · ' +
+        STATUS[screen.status][1] + '</p>' +
+      '<p>' + screen.endpoints.map(function (e) { return '<code>' + e + '</code>'; }).join(' ') + '</p>' +
+      '<p>' + screen.notes + '</p>';
+
+    stage.scrollTop = 0;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  show('inicio');
+})();
+</script>
+</body>
+</html>

@@ -111,9 +111,14 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
 - `specs/01` a `specs/09` — specs técnicas detalhadas de cada frente
   (scaffold do monorepo, RLS, seed, cadastro/login, adaptador OCR, adaptador
   Open Finance, job de projeção/notificação, push, contrato da API REST).
-- `prototipo/` — 10 telas HTML do protótipo visual (onboarding, cadastro,
-  início, atividade, insights, metas, notificações, adicionar despesa) —
-  usar como referência de UX/copy ao implementar as telas React Native.
+- `prototipo/` — protótipos HTML. **Começar por `00-app-completo.html`**: é o
+  consolidado navegável com as 14 telas, o status real de cada uma (implementada
+  / backend pronto sem tela / não existe) e os endpoints que consomem. Os
+  arquivos `04`-`10` são da sessão de planejamento e descrevem em parte um app
+  que não existe — usar como registro do desenho original, não como verdade.
+  `01`-`03` (boas-vindas) **nunca foram construídas**: o app abre no cadastro.
+  Detalhe fino de tela específica: `11` adicionar, `12`/`13` import,
+  `14` insights.
 
 ## Status atual (atualizado a cada commit — ver regra no fluxo de trabalho)
 
