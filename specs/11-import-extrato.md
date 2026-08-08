@@ -82,6 +82,86 @@ não têm regra — são meio de pagamento, não categoria.
 O preview é ordenado por volume: o usuário resolve o que mais pesa antes de
 cansar. O grupo com muitos itens e uma decisão só é o ponto do desenho.
 
+## O funil: valida um mês, aprende, replica
+
+Agrupar por comerciante derruba 951 decisões para 169, mas 169 numa sentada só
+ainda é inviável no celular. O que resolve é **guardar a decisão**: cada escolha
+vira uma regra `merchant_key -> category_id` do household, aplicada neste import,
+nos próximos, e nos outros meses do mesmo arquivo.
+
+Medido no extrato real de 12 meses, com o mês mais recente primeiro:
+
+| | decisões | resultado |
+|---|---|---|
+| mês 1 (dezembro) | **23** | cobre 57,6% do ano; o painel do mês já funciona |
+| mês 2 (novembro) | 16 | 74% já vem pronto pelas regras do mês 1 |
+| meses 3 a 12 | 5 a 22 cada | 70% a 92% já vem pronto |
+| **total** | **169** | igual ao "tudo de uma vez" |
+
+Dois resultados que fecham o desenho:
+
+1. **Aprender não cobra nada a mais.** O total é 169 em qualquer ordem — mês a mês
+   ou tudo de uma vez. Só a distribuição muda. Sem memória, o mês a mês custaria
+   **360**, porque cada mês recomeçaria do zero; era esse desperdício, e não o
+   import incremental, o problema.
+2. **A ordem é recente -> antigo.** Dezembro custa 23 decisões e janeiro custaria
+   30, e começar pelo mês corrente faz o dashboard viver imediatamente. A cobertura
+   do ano é menor no primeiro passo (57,6% contra 68,9%), o que não importa: o resto
+   vem nos meses seguintes de qualquer forma. Qualquer mês isolado cobre entre 58% e
+   72% do ano, então o desenho não depende de acertar "o mês certo".
+
+Consequência de schema: entra a tabela `import_rules` (household_id, merchant_key,
+category_id) com unique em (household_id, merchant_key). A regra do usuário **ganha**
+da sugestão por palavra-chave — `RULES` em `suggest.py` passa a ser só o palpite
+inicial de quem nunca importou nada.
+
+## Bandeja "decidir depois"
+
+No extrato real, 129 comerciantes aparecem **uma única vez**, muitos deles PIX para
+pessoas. Exigir categoria em todos travaria o usuário justamente no lançamento que
+ele não lembra, e ele abandonaria o import inteiro.
+
+Então existe uma bandeja "decidir depois": o lançamento **não é importado** e fica
+para uma segunda passada. O botão de importar libera quando nada está *sem destino* —
+adiado tem destino.
+
+O preço disso é que **o mês entra incompleto**, e o painel subestima o gasto até a
+segunda passada. Por isso o app avisa explicitamente quantos lançamentos ficaram de
+fora. Gasto não desaparece em silêncio; é a mesma razão de `uncategorized_expense`
+existir no dashboard (`specs/09`).
+
+## Item tirado do grupo é uma decisão nova, não um descarte
+
+`merchant_key` usa só as três primeiras palavras, então ele **sobre-agrupa**: num
+extrato real, "BOLETO" junta energia, mensalidade escolar e plano de saúde. Atribuído
+em lote, isso joga a escola no bucket errado em silêncio — exatamente o que a regra de
+ouro acima proíbe. Por isso o grupo é expansível e cada item pode ser tirado dele.
+
+Tirar um item **não** o descarta: ele vira uma unidade solta que exige a própria
+decisão. A primeira versão do protótipo errava isso e deixava
+`resolvidos + adiados < total` com o import liberado — um lançamento evaporava. A
+invariante a testar é:
+
+```
+resolvidos + adiados == total de lançamentos do mês
+```
+
+## Interação escolhida: bandeja por categoria
+
+Três interações foram prototipadas e comparadas em `prototipo/13-import-variantes.html`
+sobre os mesmos 23 grupos: lista de grupos, uma decisão por tela, e bandeja por
+categoria. A escolhida foi a **bandeja**.
+
+O usuário escolhe uma categoria e marca **tudo que pertence a ela**, atribuindo em
+lote. São até 9 rodadas (uma por categoria) em vez de 23 decisões, e a pergunta
+"o que aqui é Mercado?" é mais fácil que "o que é isso?".
+
+O ponto fraco assumido: no pior caso o usuário varre a lista 9 vezes. A bandeja
+"decidir depois" é o que impede o travamento.
+
+A barra de progresso conta **lançamentos**, não grupos — 79 e não 23 —, porque é o
+lançamento que representa o trabalho e o dinheiro.
+
 ## Alertas só do mês corrente
 
 A confirmação reavalia alertas **apenas do mês corrente**. Extrato de histórico
@@ -116,7 +196,13 @@ create unique index transactions_household_external_id
 
 ## Fora de escopo
 
-- Categorização automática por palavra-chave.
 - Import incremental por conta (depende de `accounts`, que só faz sentido com
   Open Finance).
 - PDF de extrato.
+- Tela de gerenciar as regras aprendidas (editar/apagar). Nasce junto com a
+  primeira reclamação de regra errada — a regra é sobrescrita na próxima escolha
+  do mesmo comerciante, então não é um beco sem saída.
+
+Saiu de "fora de escopo": **categorização automática por palavra-chave**, que a
+primeira versão desta spec descartava. Ela entrou (cobrindo 16%) e agora é só o
+palpite inicial; o que carrega o peso é a regra aprendida.

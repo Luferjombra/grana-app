@@ -194,6 +194,36 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     - Princípio nas regras de sugestão: **melhor vazio que palpite errado** —
       sugestão errada que passa batida distorce o 50-30-20 em silêncio. Termo
       ambíguo fica fora; PIX/boleto/fatura não têm regra.
+- 🟡 **Funil de import desenhado e aprovado; backend do funil ainda não existe.**
+  Ver `specs/11` (revisada) e `prototipo/13-import-variantes.html`. O import de
+  hoje funciona, mas cobra as 169 decisões de uma vez. Decisões desta leva:
+  - **Valida um mês, aprende, replica.** Cada escolha vira regra
+    `merchant_key -> category_id` do household. Medido no extrato real: **23
+    decisões no 1º mês** (dezembro), 16 no 2º, 5 a 22 nos demais com 70–92% já
+    pronto. **Total 169 em qualquer ordem — aprender não cobra a mais.** Sem
+    memória, mês a mês custaria **360**: era esse o desperdício, não o import
+    incremental. **Não reintroduzir import mês a mês sem as regras salvas.**
+  - **Ordem recente → antigo.** Dezembro custa 23 decisões contra 30 de janeiro,
+    e o painel do mês corrente vive na hora. Qualquer mês isolado cobre 58–72%
+    do ano, então o desenho não depende de escolher "o mês certo".
+  - **Regra do usuário ganha da palavra-chave.** `suggest.RULES` passa a ser só
+    o palpite de quem nunca importou nada.
+  - **Bandeja "decidir depois"**: 129 comerciantes aparecem uma única vez no
+    extrato real (muito PIX pra pessoa). Exigir categoria em todos travaria o
+    usuário no lançamento que ele não lembra. O adiado **não é importado**; o
+    mês entra incompleto e o app **avisa quantos ficaram de fora** — gasto não
+    desaparece em silêncio.
+  - **Item tirado do grupo é decisão nova, não descarte.** `merchant_key` usa 3
+    palavras e sobre-agrupa ("BOLETO" junta energia, escola e plano de saúde).
+    Tirar item cria unidade solta que exige a própria decisão. Invariante a
+    testar: `resolvidos + adiados == total do mês`. A 1ª versão do protótipo
+    errava isso e um lançamento evaporava com o import liberado.
+  - **Interação escolhida: bandeja por categoria** (variante C das três
+    prototipadas). Escolhe a categoria, marca tudo que pertence a ela, atribui
+    em lote: até 9 rodadas em vez de 23 decisões. Barra de progresso conta
+    **lançamentos** (79), não grupos (23).
+  - Pendências abertas: tabela `import_rules` (migration 0005), `month` no
+    `preview_import`, `deferred` no confirm, e a tela React Native.
 - ✅ **Spec 07 (motor de projeção/notificação)** — `app/notifications/engine.py`
   é a regra única, chamada pelo gatilho de evento (BackgroundTasks após
   create/update/**delete** de transaction) e pelo cron
@@ -301,19 +331,24 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
 
 ## Próximos passos sugeridos (retomar por aqui)
 
-1. Implementar `BankAggregatorProvider`/`PluggyProvider` de verdade + rotas
-   de contas (`/accounts/connect-token`, `/accounts/callback`, etc.) — hoje só
-   existe `MockProvider` (spec 06). Decidir como o Pluggy Connect (widget web)
-   vai rodar dentro do app Expo (WebView vs SDK nativo) antes de codar.
-2. Implementar o resto dos endpoints do contrato da API (spec 09) — faltam
-   insights, reserva de emergência, gamificação, notificações e o import
-   CSV/OFX; `receipts`, `transactions` e `dashboard` já são reais.
-3. Tela mobile do fluxo de recibo (upload de foto, confirmação dos campos
-   extraídos) — o backend já está pronto, falta a UI que consome
-   `POST /receipts` → poll `GET /receipts/{id}` → `POST /receipts/{id}/confirm`.
-4. Endpoints de insights, reserva de emergência e gamificação — só depois
-   deles as abas Insights e Metas fazem sentido.
-5. Push notifications — nasce o projeto Expo/EAS (spec 08).
+1. **Backend do funil de import** (`specs/11` revisada): migration 0005 com a
+   tabela `import_rules`, parâmetro `month` no `preview_import` (default = mês
+   mais recente do arquivo), aplicar regra salva antes da palavra-chave, e
+   gravar regra nova no confirm. É o que destrava a tela.
+2. **`deferred` no confirm de import** — a bandeja "decidir depois". Decidir
+   antes: o adiado é só estado do cliente (o usuário reimporta o arquivo) ou
+   persiste no servidor? Persistir contraria o preview stateless que a spec 11
+   escolheu pra evitar migration e limpeza de lote abandonado.
+3. **Tela mobile do import** — variante C (bandeja por categoria), desenhada em
+   `prototipo/13-import-variantes.html`. Testar a invariante
+   `resolvidos + adiados == total do mês`.
+4. Endpoints de insights, reserva de emergência e gamificação (spec 09) — só
+   depois deles as abas Insights e Metas fazem sentido. A reserva também
+   destrava o alerta `reserve_progress`, que ficou de fora da spec 07.
+5. Push notifications — precisa de tabela `push_tokens`, que não existe, e do
+   projeto Expo/EAS nascer (spec 08).
+6. Open Finance/Pluggy — **bloqueado por regulação**, não retomar sem revisitar
+   `docs/adr/0001-open-finance-adiado.md` e confirmar a norma final do BCB.
 
 ## Como o usuário prefere trabalhar
 

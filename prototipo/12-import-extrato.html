@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Import de extrato — funil que aprende</title>
+<!--
+  Funil de import de extrato (specs/11 + proposta do usuário).
+
+  Desenho: quando o arquivo tem mais de um mês, o usuário valida SÓ O PRIMEIRO
+  mês; cada escolha vira regra e é replicada nos meses seguintes.
+
+  Números medidos no extrato real do Banco C6 (1.059 lançamentos, 12 meses):
+    - total de decisões = 169, seja mês a mês ou tudo de uma vez.
+      Aprender não custa nada extra; só muda a distribuição.
+    - começando pelo mês MAIS RECENTE: dezembro custa 23 decisões e
+      cobre 57,6% do ano inteiro.
+    - do 2º mês em diante, 70-92% já vem pronto: 5 a 23 decisões por mês.
+    - começar pelo mais antigo custaria 30 decisões (janeiro) e cobriria 68,9%,
+      mas atrasa o dashboard do mês corrente. Recente ganha.
+
+  Comerciantes são FICTÍCIOS de propósito: as contagens são reais, os nomes não,
+  porque o extrato de origem é gasto pessoal do usuário.
+
+  Sem CDN: ícone é SVG inline, porque o CSP do Artifact bloqueia host externo.
+-->
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #14171c;
+    --surface: #1c2028;
+    --raised: #232832;
+    --line: #2b313b;
+    --text: #eef0f3;
+    --dim: #8a8f98;
+    --faint: #656b74;
+    --accent: #e8a33d;
+    --ink: #2a1c04;
+    --good: #5dcaa5;
+  }
+  body {
+    margin: 0; padding: 32px 16px 64px; background: #2b2e33;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  /* navegação entre telas, fora do aparelho */
+  .nav { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 460px; }
+  .nav button {
+    background: #1c2028; color: var(--dim); border: 1px solid #363c46;
+    border-radius: 20px; padding: 6px 13px; font-size: 11.5px;
+  }
+  .nav button[aria-current="true"] { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+
+  .frame {
+    width: 390px; max-width: 100%; background: var(--bg); border-radius: 28px;
+    overflow: hidden; border: 6px solid #05070a;
+  }
+  .screen { display: none; }
+  .screen[data-on="1"] { display: block; }
+
+  .bar {
+    padding: 1rem 1.1rem .6rem; display: flex; justify-content: space-between;
+    align-items: center; font-size: 13px;
+  }
+  .bar .t { font-size: 15px; font-weight: 500; }
+  .bar .side { width: 62px; color: var(--dim); font-size: 12.5px; }
+  .bar .side.r { text-align: right; }
+  .pad { padding: .25rem 1.1rem 1.4rem; }
+
+  h2 { font-size: 19px; font-weight: 500; margin: 0 0 6px; letter-spacing: -.01em; }
+  p.sub { font-size: 12.5px; color: var(--dim); margin: 0 0 16px; line-height: 1.5; }
+
+  .card { background: var(--surface); border-radius: 12px; padding: 13px 14px; margin-bottom: 10px; }
+  .card.pick { border: 1px solid var(--accent); }
+
+  .stats { display: flex; gap: 8px; margin-bottom: 16px; }
+  .stat { flex: 1; background: var(--surface); border-radius: 10px; padding: 10px 11px; }
+  .stat b { display: block; font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 10.5px; color: var(--dim); }
+
+  .opt { width: 100%; text-align: left; background: var(--surface); color: var(--text);
+         border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; margin-bottom: 9px; }
+  .opt[aria-pressed="true"] { border-color: var(--accent); background: var(--raised); }
+  .opt b { display: block; font-size: 14px; font-weight: 500; margin-bottom: 3px; }
+  .opt span { font-size: 11.5px; color: var(--dim); line-height: 1.45; display: block; }
+  .tag { display: inline-block; background: var(--accent); color: var(--ink); font-size: 9.5px;
+         border-radius: 10px; padding: 2px 7px; margin-left: 6px; vertical-align: 1px; }
+
+  .prog { margin-bottom: 14px; }
+  .prog .top { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); margin-bottom: 6px; }
+  .track { height: 6px; background: var(--surface); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .25s; }
+  .fill.g { background: var(--good); }
+
+  /* grupo de comerciante */
+  .grp { background: var(--surface); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
+  .grp.done { opacity: .62; }
+  .ghead { display: flex; align-items: center; gap: 10px; padding: 11px 12px; }
+  .gmain { flex: 1; min-width: 0; }
+  .gname { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gmeta { font-size: 10.5px; color: var(--dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .gcat {
+    background: var(--raised); color: var(--dim); border: 1px dashed #3d444f;
+    border-radius: 18px; padding: 5px 11px; font-size: 11px; white-space: nowrap;
+  }
+  .gcat.set { background: var(--accent); color: var(--ink); border: 1px solid var(--accent); }
+  .gexp { background: none; border: none; color: var(--faint); padding: 4px; line-height: 0; }
+  .gexp svg { transition: transform .2s; }
+  .grp[data-open="1"] .gexp svg { transform: rotate(180deg); }
+
+  .cats { display: none; flex-wrap: wrap; gap: 5px; padding: 0 12px 12px; }
+  .grp[data-cats="1"] .cats { display: flex; }
+  .cats button {
+    background: var(--raised); color: var(--text); border: none;
+    border-radius: 16px; padding: 6px 11px; font-size: 11px;
+  }
+  .cats button.on { background: var(--accent); color: var(--ink); }
+
+  .items { display: none; border-top: 1px solid var(--line); }
+  .grp[data-open="1"] .items { display: block; }
+  .item { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-bottom: 1px solid #22272f; }
+  .item:last-child { border-bottom: none; }
+  .item.out { opacity: .38; text-decoration: line-through; }
+  .idesc { flex: 1; min-width: 0; font-size: 11.5px; color: #cfd3d9;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ival { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .ix { background: none; border: none; color: var(--faint); font-size: 13px; padding: 0 2px; }
+
+  .note { font-size: 11px; color: var(--faint); line-height: 1.5; margin: 12px 0 0; }
+  .cta {
+    width: 100%; background: var(--accent); color: var(--ink); border: none;
+    border-radius: 11px; padding: 13px 0; font-size: 14px; font-weight: 500; margin-top: 4px;
+  }
+  .cta[disabled] { opacity: .4; cursor: default; }
+  .cta.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); margin-top: 8px; }
+
+  .learned { background: var(--surface); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .learned h3 { font-size: 12px; font-weight: 500; margin: 0 0 9px; color: var(--dim); }
+  .rule { display: flex; align-items: center; gap: 7px; font-size: 11.5px; padding: 4px 0; }
+  .rule code { background: var(--raised); border-radius: 4px; padding: 2px 6px; font-size: 10.5px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; color: #cfd3d9; }
+  .rule .to { color: var(--faint); }
+  .rule .cat { color: var(--accent); }
+
+  .months { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .m { display: flex; align-items: center; gap: 9px; font-size: 11.5px; }
+  .m .lbl { width: 30px; color: var(--dim); }
+  .m .track { flex: 1; }
+  .m .n { width: 62px; text-align: right; color: var(--faint); font-variant-numeric: tabular-nums; font-size: 10.5px; }
+  .m.now .lbl { color: var(--text); }
+
+  .legend { max-width: 460px; font-size: 11.5px; color: #9aa0a8; line-height: 1.6; text-align: center; }
+  .legend b { color: #cfd3d9; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="nav" id="nav"></div>
+
+<div class="frame">
+
+  <!-- ============ 1. arquivo lido ============ -->
+  <section class="screen" data-s="0" data-on="1">
+    <div class="bar"><span class="side">Cancelar</span><span class="t">Importar extrato</span><span class="side r"></span></div>
+    <div class="pad">
+      <h2>Li seu extrato</h2>
+      <p class="sub">Banco C6 · extrato-2024.ofx</p>
+
+      <div class="stats">
+        <div class="stat"><b>1.059</b><span>lançamentos</span></div>
+        <div class="stat"><b>12</b><span>meses</span></div>
+        <div class="stat"><b>951</b><span>despesas</span></div>
+      </div>
+
+      <p class="sub">
+        São 12 meses, de janeiro a dezembro de 2024. Não vou pedir categoria para as 951
+        despesas — você resolve <b style="color:#cfd3d9">um mês</b>, e eu aplico o que aprendi
+        nos outros.
+      </p>
+
+      <button class="opt" aria-pressed="true">
+        <b>Começar por dezembro <span class="tag">recomendado</span></b>
+        <span>O mês mais recente. 23 escolhas e seu painel de dezembro já funciona. Depois eu ofereço novembro, já quase pronto.</span>
+      </button>
+      <button class="opt" aria-pressed="false">
+        <b>Só dezembro, e pronto</b>
+        <span>Importa apenas o mês mais recente e descarta o resto do arquivo.</span>
+      </button>
+      <button class="opt" aria-pressed="false">
+        <b>Tudo de uma vez</b>
+        <span>169 escolhas numa sentada. Mesmo esforço total, mas nada funciona até o fim.</span>
+      </button>
+
+      <button class="cta" data-go="1">Continuar</button>
+      <p class="note">Nada é gravado até você confirmar cada mês.</p>
+    </div>
+  </section>
+
+  <!-- ============ 2. validar dezembro ============ -->
+  <section class="screen" data-s="1">
+    <div class="bar"><span class="side">Voltar</span><span class="t">Dezembro</span><span class="side r">mês 1/12</span></div>
+    <div class="pad">
+      <div class="prog">
+        <div class="top"><span id="p1lbl">6 de 79 despesas resolvidas</span><span id="p1pct">8%</span></div>
+        <div class="track"><div class="fill" id="p1fill" style="width:8%"></div></div>
+      </div>
+
+      <p class="sub" style="margin-bottom:12px">
+        Agrupei por comerciante e ordenei pelo que mais pesa. Uma escolha vale para o grupo
+        inteiro — e vira regra para os outros 11 meses.
+      </p>
+
+      <div id="groups"></div>
+
+      <button class="cta" id="p1cta" disabled>Importar dezembro</button>
+      <p class="note">
+        Toque na seta para ver os lançamentos do grupo e tirar o que não pertence — o
+        agrupamento usa as primeiras palavras da descrição, então "BOLETO" pode juntar coisas
+        diferentes.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 3. dezembro pronto + aprendizado ============ -->
+  <section class="screen" data-s="2">
+    <div class="bar"><span class="side"></span><span class="t">Dezembro pronto</span><span class="side r">mês 1/12</span></div>
+    <div class="pad">
+      <h2>79 despesas importadas</h2>
+      <p class="sub">Seu painel de dezembro já está funcionando. E eu aprendi 23 regras suas.</p>
+
+      <div class="learned">
+        <h3>O que eu aprendi</h3>
+        <div class="rule"><code>PIX ANA BEATRIZ</code><span class="to">→</span><span class="cat">Moradia</span></div>
+        <div class="rule"><code>MERCEARIA VILA NOVA</code><span class="to">→</span><span class="cat">Mercado</span></div>
+        <div class="rule"><code>DROGARIA SAO LUCAS</code><span class="to">→</span><span class="cat">Contas</span></div>
+        <div class="rule"><code>PAG JOAQUIM LANCHES</code><span class="to">→</span><span class="cat">Delivery</span></div>
+        <p class="note" style="margin-top:8px">e outras 19. Dá para editar depois em Ajustes › Regras.</p>
+      </div>
+
+      <p class="sub" style="margin-bottom:10px">Com essas regras, o resto do arquivo já está assim:</p>
+      <div class="months" id="months"></div>
+
+      <button class="cta" data-go="3">Continuar com novembro · 16 escolhas</button>
+      <button class="cta ghost" data-go="0">Parar aqui e ver meu painel</button>
+      <p class="note">Você pode parar em qualquer mês. O que já entrou fica.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4. novembro, com o aprendizado agindo ============ -->
+  <section class="screen" data-s="3">
+    <div class="bar"><span class="side">Voltar</span><span class="t">Novembro</span><span class="side r">mês 2/12</span></div>
+    <div class="pad">
+      <div class="prog">
+        <div class="top"><span>67 de 90 despesas resolvidas</span><span>74%</span></div>
+        <div class="track"><div class="fill g" style="width:74%"></div></div>
+      </div>
+
+      <div class="card" style="display:flex;align-items:center;gap:11px">
+        <span style="color:var(--good);font-size:17px;line-height:1">✓</span>
+        <div>
+          <div style="font-size:13px;font-weight:500">67 já categorizados</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:2px">pelas regras que você ensinou em dezembro</div>
+        </div>
+      </div>
+
+      <p class="sub" style="margin:14px 0 10px">Sobraram 16 comerciantes novos:</p>
+
+      <div class="grp">
+        <div class="ghead">
+          <div class="gmain"><div class="gname">MATERIAIS SAO JORGE</div><div class="gmeta">4 lançamentos · R$ 612,40</div></div>
+          <button class="gcat">Escolher</button>
+        </div>
+      </div>
+      <div class="grp">
+        <div class="ghead">
+          <div class="gmain"><div class="gname">PIX RENATO ALVES</div><div class="gmeta">3 lançamentos · R$ 450,00</div></div>
+          <button class="gcat">Escolher</button>
+        </div>
+      </div>
+      <div class="grp">
+        <div class="ghead">
+          <div class="gmain"><div class="gname">FLORICULTURA BEIJA FLOR</div><div class="gmeta">2 lançamentos · R$ 189,90</div></div>
+          <button class="gcat">Escolher</button>
+        </div>
+      </div>
+      <p class="note" style="margin-bottom:14px">e outros 13 grupos.</p>
+
+      <button class="cta">Importar novembro</button>
+      <button class="cta ghost" data-go="0">Parar aqui</button>
+    </div>
+  </section>
+
+</div>
+
+<p class="legend">
+  Contagens medidas no extrato real de 12 meses; nomes de comerciante são fictícios.
+  <b>169 escolhas no total</b>, seja mês a mês ou tudo de uma vez — aprender não cobra a mais,
+  só antecipa o valor: <b>23 escolhas</b> e dezembro já vive.
+</p>
+
+<script>
+(function () {
+  var CATS = ['Moradia','Mercado','Contas','Transporte','Lazer','Compras','Delivery','Streaming','Investimentos'];
+
+  // dezembro: 79 despesas em 23 grupos. 6 já vêm sugeridas por palavra-chave.
+  var GROUPS = [
+    { n:'IFOOD *PEDIDO',            c:5, v:'R$ 318,70', pre:'Delivery' },
+    { n:'NETFLIX.COM',              c:1, v:'R$ 44,90',  pre:'Streaming' },
+    { n:'PIX ANA BEATRIZ',          c:8, v:'R$ 2.400,00' },
+    { n:'MERCEARIA VILA NOVA',      c:7, v:'R$ 1.183,25' },
+    { n:'PAG JOAQUIM LANCHES',      c:6, v:'R$ 274,80' },
+    { n:'DROGARIA SAO LUCAS',       c:6, v:'R$ 431,60' },
+    { n:'BOLETO',                   c:5, v:'R$ 1.842,00', mix:1 },
+    { n:'PANIF ESQUINA',            c:5, v:'R$ 167,30' },
+    { n:'CANTINA DONA ZITA',        c:4, v:'R$ 296,00' },
+    { n:'PET SHOP AMIGO FIEL',      c:4, v:'R$ 388,50' },
+    { n:'LIVRARIA MARGEM',          c:3, v:'R$ 214,70' },
+    { n:'BARBEARIA NORTE',          c:3, v:'R$ 150,00' },
+    { n:'PIX CARLOS EDUARDO',       c:3, v:'R$ 620,00' },
+    { n:'ESTUDIO PILATES SUL',      c:3, v:'R$ 480,00' },
+    { n:'OTICA CLARA VISTA',        c:2, v:'R$ 740,00' },
+    { n:'FEIRA DO PRODUTOR',        c:2, v:'R$ 138,40' },
+    { n:'CHAVEIRO EXPRESSO',        c:2, v:'R$ 95,00' },
+    { n:'SORVETERIA GELATO',        c:2, v:'R$ 68,00' },
+    { n:'PIX MARIA HELENA',         c:2, v:'R$ 300,00' },
+    { n:'ASSINATURA REVISTA',       c:2, v:'R$ 59,80' },
+    { n:'LAVA RAPIDO BRILHO',       c:2, v:'R$ 130,00' },
+    { n:'PAPELARIA CENTRAL',        c:1, v:'R$ 47,90' },
+    { n:'CINEMA PRACA',             c:1, v:'R$ 62,00' }
+  ];
+
+  // itens do grupo "BOLETO": mostra por que expandir importa — o agrupamento
+  // por primeiras palavras junta contas de natureza diferente.
+  var MIXED = [
+    'BOLETO ENERGIA DEZ/24 · R$ 284,10',
+    'BOLETO ESCOLA INFANTIL · R$ 890,00',
+    'BOLETO PLANO SAUDE · R$ 512,40',
+    'BOLETO ENERGIA NOV/24 · R$ 96,50',
+    'BOLETO SEGURO RESID · R$ 59,00'
+  ];
+
+  var TOTAL = 79, resolved = 6;
+  var box = document.getElementById('groups');
+
+  function svgChev() {
+    return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+           'stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>';
+  }
+
+  GROUPS.forEach(function (g, i) {
+    var el = document.createElement('div');
+    el.className = 'grp' + (g.pre ? ' done' : '');
+    el.dataset.count = g.c;
+
+    var items = '';
+    for (var k = 0; k < g.c; k++) {
+      var label = g.mix ? MIXED[k] : g.n + ' · lançamento ' + (k + 1);
+      var parts = label.split(' · R$ ');
+      items += '<div class="item">' +
+                 '<span class="idesc">' + parts[0] + '</span>' +
+                 (parts[1] ? '<span class="ival">R$ ' + parts[1] + '</span>' : '') +
+                 '<button class="ix" title="Não é deste grupo">✕</button>' +
+               '</div>';
+    }
+
+    el.innerHTML =
+      '<div class="ghead">' +
+        '<div class="gmain">' +
+          '<div class="gname">' + g.n + '</div>' +
+          '<div class="gmeta">' + g.c + (g.c > 1 ? ' lançamentos' : ' lançamento') + ' · ' + g.v +
+            (g.mix ? ' · <span style="color:var(--accent)">confira</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<button class="gcat' + (g.pre ? ' set' : '') + '">' + (g.pre || 'Escolher') + '</button>' +
+        '<button class="gexp" aria-label="Ver lançamentos">' + svgChev() + '</button>' +
+      '</div>' +
+      '<div class="cats">' + CATS.map(function (c) {
+        return '<button' + (g.pre === c ? ' class="on"' : '') + '>' + c + '</button>';
+      }).join('') + '</div>' +
+      '<div class="items">' + items + '</div>';
+
+    box.appendChild(el);
+
+    var catBtn = el.querySelector('.gcat');
+    var expBtn = el.querySelector('.gexp');
+
+    catBtn.addEventListener('click', function () {
+      el.dataset.cats = el.dataset.cats === '1' ? '' : '1';
+    });
+    expBtn.addEventListener('click', function () {
+      el.dataset.open = el.dataset.open === '1' ? '' : '1';
+    });
+
+    el.querySelectorAll('.cats button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var wasSet = catBtn.classList.contains('set');
+        el.querySelectorAll('.cats button').forEach(function (o) { o.classList.remove('on'); });
+        b.classList.add('on');
+        catBtn.textContent = b.textContent;
+        catBtn.classList.add('set');
+        el.classList.add('done');
+        el.dataset.cats = '';
+        if (!wasSet) { resolved += activeCount(el); paint(); }
+      });
+    });
+
+    // ✕ tira o lançamento do grupo: ele deixa de contar como resolvido
+    el.querySelectorAll('.ix').forEach(function (x) {
+      x.addEventListener('click', function () {
+        var row = x.closest('.item');
+        var wasOut = row.classList.contains('out');
+        row.classList.toggle('out');
+        if (catBtn.classList.contains('set')) {
+          resolved += wasOut ? 1 : -1;
+          paint();
+        }
+      });
+    });
+  });
+
+  function activeCount(el) {
+    var outs = el.querySelectorAll('.item.out').length;
+    return parseInt(el.dataset.count, 10) - outs;
+  }
+
+  function paint() {
+    var pct = Math.round(resolved / TOTAL * 100);
+    document.getElementById('p1fill').style.width = pct + '%';
+    document.getElementById('p1pct').textContent = pct + '%';
+    document.getElementById('p1lbl').textContent = resolved + ' de ' + TOTAL + ' despesas resolvidas';
+    var cta = document.getElementById('p1cta');
+    cta.disabled = resolved < TOTAL;
+    cta.textContent = resolved < TOTAL
+      ? 'Importar dezembro · faltam ' + (TOTAL - resolved)
+      : 'Importar dezembro · 79 despesas';
+  }
+  paint();
+
+  // meses restantes com as regras de dezembro já aplicadas (medido, ordem recente->antigo)
+  var MONTHS = [
+    ['nov', 74, 16], ['out', 70, 22], ['set', 81, 10], ['ago', 75, 18],
+    ['jul', 72, 20], ['jun', 73, 20], ['mai', 76, 15], ['abr', 91, 5],
+    ['mar', 92, 5],  ['fev', 86, 7],  ['jan', 90, 8]
+  ];
+  document.getElementById('months').innerHTML = MONTHS.map(function (m, i) {
+    return '<div class="m' + (i === 0 ? ' now' : '') + '">' +
+             '<span class="lbl">' + m[0] + '</span>' +
+             '<span class="track"><span class="fill g" style="width:' + m[1] + '%"></span></span>' +
+             '<span class="n">' + m[2] + ' escolhas</span>' +
+           '</div>';
+  }).join('');
+
+  // navegação
+  var screens = [].slice.call(document.querySelectorAll('.screen'));
+  var NAMES = ['1 · Arquivo', '2 · Validar dezembro', '3 · Aprendizado', '4 · Novembro'];
+  var nav = document.getElementById('nav');
+
+  function show(i) {
+    screens.forEach(function (s, k) { s.dataset.on = k === i ? '1' : ''; });
+    [].slice.call(nav.children).forEach(function (b, k) {
+      b.setAttribute('aria-current', k === i ? 'true' : 'false');
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  NAMES.forEach(function (n, i) {
+    var b = document.createElement('button');
+    b.textContent = n;
+    b.setAttribute('aria-current', i === 0 ? 'true' : 'false');
+    b.addEventListener('click', function () { show(i); });
+    nav.appendChild(b);
+  });
+
+  document.querySelectorAll('[data-go]').forEach(function (b) {
+    b.addEventListener('click', function () { show(parseInt(b.dataset.go, 10)); });
+  });
+
+  document.querySelectorAll('.opt').forEach(function (o) {
+    o.addEventListener('click', function () {
+      document.querySelectorAll('.opt').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+      o.setAttribute('aria-pressed', 'true');
+    });
+  });
+})();
+</script>
+</body>
+</html>
