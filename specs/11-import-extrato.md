@@ -93,27 +93,85 @@ Medido no extrato real de 12 meses, com o mês mais recente primeiro:
 
 | | decisões | resultado |
 |---|---|---|
-| mês 1 (dezembro) | **23** | cobre 57,6% do ano; o painel do mês já funciona |
-| mês 2 (novembro) | 16 | 74% já vem pronto pelas regras do mês 1 |
-| meses 3 a 12 | 5 a 22 cada | 70% a 92% já vem pronto |
-| **total** | **169** | igual ao "tudo de uma vez" |
+| mês 1 (dezembro) | **27** | o painel do mês já funciona |
+| mês 2 (novembro) | 18 | 65 dos 101 lançamentos já vêm resolvidos pelas regras do mês 1 |
+| meses 3 a 12 | 8 a 29 cada | 46 a 69 já resolvidos por mês |
+| **total** | **217** | igual ao "tudo de uma vez" |
+
+Números medidos rodando o backend de verdade contra o arquivo, não estimados:
+1.059 de 1.059 lançamentos gravados, 205 regras aprendidas ao fim, e as sugestões
+saltando de 7 no primeiro mês para 46-69 nos seguintes.
 
 Dois resultados que fecham o desenho:
 
-1. **Aprender não cobra nada a mais.** O total é 169 em qualquer ordem — mês a mês
-   ou tudo de uma vez. Só a distribuição muda. Sem memória, o mês a mês custaria
-   **360**, porque cada mês recomeçaria do zero; era esse desperdício, e não o
-   import incremental, o problema.
-2. **A ordem é recente -> antigo.** Dezembro custa 23 decisões e janeiro custaria
-   30, e começar pelo mês corrente faz o dashboard viver imediatamente. A cobertura
-   do ano é menor no primeiro passo (57,6% contra 68,9%), o que não importa: o resto
-   vem nos meses seguintes de qualquer forma. Qualquer mês isolado cobre entre 58% e
-   72% do ano, então o desenho não depende de acertar "o mês certo".
+1. **Aprender não cobra nada a mais.** O total é o mesmo em qualquer ordem — mês a
+   mês ou tudo de uma vez. Só a distribuição muda. Sem memória, o mês a mês
+   custaria mais que o dobro, porque cada mês recomeçaria do zero; era esse
+   desperdício, e não o import incremental, o problema.
+2. **A ordem é recente -> antigo.** Começar pelo mês corrente faz o dashboard
+   viver imediatamente, e é o mês mais barato (o mais antigo custaria mais
+   decisões). Qualquer mês isolado cobre entre 58% e 72% do ano, então o desenho
+   não depende de acertar "o mês certo".
+
+## Lançamento sem descrição não agrupa
+
+O extrato real trouxe **49 despesas sem descrição alguma**, somando
+**R$ 115.177,56** — de R$ 0,02 a R$ 23.395. Todas produzem `merchant_key` vazia e
+caíam num único grupo. Uma escolha só teria jogado esse valor inteiro numa
+categoria, e é o pior caso possível da regra de ouro: distorção grande e silenciosa
+do 50-30-20.
+
+Então chave vazia **não agrupa**: cada lançamento vira uma decisão própria. Custa
++48 decisões no ano (169 -> 217) e +4 no primeiro mês (23 -> 27). É o preço de não
+chutar.
+
+Chave vazia não é só descrição vazia — também cai aqui a descrição feita só de
+ruído, como uma data solta ("26/03/2024") ou "Osasco OSASCO BRA", em que todo token
+está em `NOISE_TOKENS`.
+
+Pela mesma razão, o confirm **não aprende regra de chave vazia**: ela casaria com
+todo lançamento sem descrição dos próximos meses.
+
+## Grupo só de receita não pede categoria
+
+Só despesa exige `category_id`. O preview marca cada grupo com `needs_category`,
+verdadeiro quando há ao menos uma despesa nele.
+
+Sem isso a tela cobraria decisão de grupo de entrada — no extrato real, 3 dos 28
+grupos de dezembro são só entrada (salário, PIX recebido), e contá-los inflava o
+trabalho aparente. Grupo **misto** existe e pede categoria: compra e venda do mesmo
+ativo caem na mesma chave.
 
 Consequência de schema: entra a tabela `import_rules` (household_id, merchant_key,
-category_id) com unique em (household_id, merchant_key). A regra do usuário **ganha**
-da sugestão por palavra-chave — `RULES` em `suggest.py` passa a ser só o palpite
-inicial de quem nunca importou nada.
+category_id) com unique em (household_id, merchant_key) — migration 0005. A regra do
+usuário **ganha** da sugestão por palavra-chave: `RULES` em `suggest.py` passa a ser
+só o palpite inicial de quem nunca importou nada.
+
+`merchant_key` é derivada em Python, não no banco, porque a normalização muda junto
+com o parser. Se a fórmula mudar, as regras deixam de casar e o usuário reescolhe —
+nada corrompe.
+
+**Comerciante com mais de uma categoria não gera regra.** O usuário pode tirar um
+item do grupo e dar outra categoria a ele; as duas linhas têm a mesma chave, e
+gravar a última criaria uma regra que erra em silêncio nos meses seguintes. Também
+não se aprende de receita: a regra é só (comerciante -> categoria), sem tipo, e
+aplicá-la a um PIX *recebido* da mesma pessoa jogaria uma entrada numa categoria de
+gasto.
+
+O `on_conflict` do upsert **é** seguro aqui, diferente do insert de `transactions`:
+`import_rules_household_merchant` é unique simples e o Postgres infere o alvo pela
+lista de colunas. O de transactions é parcial e não pode.
+
+### API
+
+`POST /transactions/import` aceita `month` (AAAA-MM) como campo do multipart.
+Omitido, vem o mês mais recente. A resposta traz `month`, `months`
+(`[{month, total}]`, do mais recente pro mais antigo) e `summary.rules_applied`.
+`POST /transactions/import/confirm` devolve `rules_learned`.
+
+As regras são gravadas **mesmo quando tudo era duplicata**: o usuário gastou as
+escolhas, e descartá-las porque o extrato já havia sido importado faria o próximo
+arquivo cobrar o mesmo trabalho.
 
 ## Bandeja "decidir depois"
 

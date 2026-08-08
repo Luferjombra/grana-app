@@ -25,6 +25,7 @@ class RecordedQuery:
     limit_value: int | None = None
     payload: object = None
     count_only: bool = False
+    on_conflict: list[str] = field(default_factory=list)
 
 
 class FakeQuery:
@@ -37,9 +38,12 @@ class FakeQuery:
         self._q.payload = payload
         return self
 
-    def upsert(self, payload, **_kwargs):
+    def upsert(self, payload, **kwargs):
         self._q.op = "upsert"
         self._q.payload = payload
+        conflict = kwargs.get("on_conflict")
+        if conflict:
+            self._q.on_conflict = [column.strip() for column in conflict.split(",")]
         return self
 
     def update(self, payload):
@@ -124,6 +128,21 @@ class FakeDb:
             payload = q.payload if isinstance(q.payload, list) else [q.payload]
             created = []
             for item in payload:
+                # `on_conflict` de verdade: sobrescreve a linha que casa nas
+                # colunas do conflito, em vez de acumular duplicata. Antes o fake
+                # sempre dava append, e um upsert quebrado passava no teste — foi
+                # assim que o bug do `on_conflict` em índice parcial chegou perto
+                # de produção (ver CLAUDE.md).
+                existing = None
+                if q.on_conflict:
+                    key = {column: item.get(column) for column in q.on_conflict}
+                    existing = next((row for row in rows if _matches(row, key)), None)
+
+                if existing is not None:
+                    existing.update(item)
+                    created.append(existing)
+                    continue
+
                 row = {**item}
                 row.setdefault("id", self._next_id)
                 self._next_id += 1

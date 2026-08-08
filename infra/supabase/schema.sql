@@ -172,6 +172,33 @@ alter table transactions
   add constraint fk_transactions_receipt foreign key (receipt_id) references receipts(id) on delete set null;
 
 -- ----------------------------------------------------------------------------
+-- 4b. REGRAS DE CATEGORIZAÇÃO APRENDIDAS NO IMPORT (specs/11)
+-- ----------------------------------------------------------------------------
+-- O que torna o import de histórico viável: cada categoria escolhida no preview
+-- vira regra e se aplica aos outros meses e aos próximos extratos. Medido em
+-- extrato real de 12 meses, o 1º mês custa 23 escolhas e os seguintes chegam
+-- com 70-92% já resolvido; sem isso seriam 169 numa sentada só.
+--
+-- merchant_key é derivada em Python (app/imports/suggest.py::merchant_key), não
+-- no banco: a normalização muda junto com o parser e não vale duplicar essa
+-- lógica em duas linguagens. Se a fórmula mudar, as regras deixam de casar e o
+-- usuário reescolhe — nada corrompe.
+
+create table import_rules (
+  id                bigserial primary key,
+  household_id      bigint not null references households(id) on delete cascade,
+  merchant_key      text not null check (length(trim(merchant_key)) > 0),
+  -- cascade, e não set null: regra sem categoria não é regra
+  category_id       bigint not null references categories(id) on delete cascade,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+-- uma regra por comerciante por household; o upsert do confirm depende disto
+create unique index import_rules_household_merchant
+  on import_rules (household_id, merchant_key);
+
+-- ----------------------------------------------------------------------------
 -- 5. ASSINATURAS RECORRENTES (detecção automática)
 -- ----------------------------------------------------------------------------
 

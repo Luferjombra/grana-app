@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 
 from app.auth import CurrentUser, get_current_user
 from app.common import today_local
@@ -12,10 +12,16 @@ router = APIRouter(prefix="/transactions/import", tags=["imports"])
 @router.post("")
 async def preview_import(
     file: UploadFile = File(...),
+    month: str | None = Form(None),
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Só lê e devolve o preview — nada é gravado até a confirmação."""
-    return await service.preview_import(current_user, file)
+    """Só lê e devolve o preview — nada é gravado até a confirmação.
+
+    `month` (AAAA-MM) escolhe qual mês do arquivo revisar. Omitido, vem o mais
+    recente: extrato de 12 meses cobraria 169 decisões de uma vez, e resolver um
+    mês já ensina as regras que resolvem os outros (specs/11).
+    """
+    return await service.preview_import(current_user, file, month)
 
 
 @router.post("/confirm")

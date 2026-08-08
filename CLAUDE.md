@@ -194,20 +194,38 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     - Princípio nas regras de sugestão: **melhor vazio que palpite errado** —
       sugestão errada que passa batida distorce o 50-30-20 em silêncio. Termo
       ambíguo fica fora; PIX/boleto/fatura não têm regra.
-- 🟡 **Funil de import desenhado e aprovado; backend do funil ainda não existe.**
-  Ver `specs/11` (revisada) e `prototipo/13-import-variantes.html`. O import de
-  hoje funciona, mas cobra as 169 decisões de uma vez. Decisões desta leva:
+- ✅ **Backend do funil de import (regras aprendidas + um mês por vez).**
+  Migration `0005_import_rules.sql`, `app/imports/rules.py`, `month` no
+  `preview_import`. Ver `specs/11` (revisada) e
+  `prototipo/13-import-variantes.html`. **Validado rodando contra o extrato real
+  do C6**: 1.059/1.059 gravados, 205 regras aprendidas, sugestões saltando de 7
+  no 1º mês para 46–69 nos seguintes, e reimportar dezembro dá
+  `imported=0 skipped=102`. Decisões desta leva:
   - **Valida um mês, aprende, replica.** Cada escolha vira regra
-    `merchant_key -> category_id` do household. Medido no extrato real: **23
-    decisões no 1º mês** (dezembro), 16 no 2º, 5 a 22 nos demais com 70–92% já
-    pronto. **Total 169 em qualquer ordem — aprender não cobra a mais.** Sem
-    memória, mês a mês custaria **360**: era esse o desperdício, não o import
-    incremental. **Não reintroduzir import mês a mês sem as regras salvas.**
-  - **Ordem recente → antigo.** Dezembro custa 23 decisões contra 30 de janeiro,
-    e o painel do mês corrente vive na hora. Qualquer mês isolado cobre 58–72%
-    do ano, então o desenho não depende de escolher "o mês certo".
+    `merchant_key -> category_id` do household. Medido: **27 decisões no 1º mês**
+    (dezembro), 18 no 2º, 8 a 29 nos demais. **Total 217 em qualquer ordem —
+    aprender não cobra a mais.** Sem memória, mês a mês custaria mais que o
+    dobro: era esse o desperdício, não o import incremental. **Não reintroduzir
+    import mês a mês sem as regras salvas.**
+  - **Ordem recente → antigo.** O painel do mês corrente vive na hora, e é o mês
+    mais barato. Qualquer mês isolado cobre 58–72% do ano, então o desenho não
+    depende de escolher "o mês certo".
   - **Regra do usuário ganha da palavra-chave.** `suggest.RULES` passa a ser só
     o palpite de quem nunca importou nada.
+  - **Comerciante ambíguo não gera regra**, e **receita nunca gera regra**: a
+    regra é só (comerciante → categoria), sem tipo, e aplicá-la a um PIX
+    *recebido* jogaria entrada numa categoria de gasto.
+  - **Lançamento sem descrição NÃO agrupa.** No extrato real são 49 despesas sem
+    descrição alguma somando **R$ 115.177** (de R$ 0,02 a R$ 23.395), todas com
+    `merchant_key` vazia. Uma escolha só jogaria isso tudo numa categoria — pior
+    caso da regra de ouro. Custa +48 decisões no ano (169 → 217) e é o preço de
+    não chutar. Chave vazia também pega descrição só de ruído (uma data,
+    "Osasco OSASCO BRA"). O confirm **não aprende regra de chave vazia**.
+  - **`needs_category` por grupo**: só despesa exige categoria. Sem a flag a tela
+    cobraria decisão de grupo de entrada (3 dos 28 de dezembro).
+  - `on_conflict` **é** seguro em `import_rules` (unique simples), diferente do
+    insert de `transactions` (índice parcial). O `FakeDb` dos testes agora modela
+    `on_conflict` de verdade — antes só dava append e escondia upsert quebrado.
   - **Bandeja "decidir depois"**: 129 comerciantes aparecem uma única vez no
     extrato real (muito PIX pra pessoa). Exigir categoria em todos travaria o
     usuário no lançamento que ele não lembra. O adiado **não é importado**; o
@@ -222,8 +240,13 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     prototipadas). Escolhe a categoria, marca tudo que pertence a ela, atribui
     em lote: até 9 rodadas em vez de 23 decisões. Barra de progresso conta
     **lançamentos** (79), não grupos (23).
-  - Pendências abertas: tabela `import_rules` (migration 0005), `month` no
-    `preview_import`, `deferred` no confirm, e a tela React Native.
+  - **A bandeja "decidir depois" não precisa de backend**: o app simplesmente não
+    manda essas linhas no confirm. E a segunda passada é de graça no OFX —
+    reimportar o arquivo traz só o que ficou de fora, porque o já importado é
+    barrado pelo FITID. **No CSV isso não vale** (sem id, duplicata é só avisada):
+    furo aceito e não resolvido, por decisão do usuário de focar em OFX.
+  - Pendência: a tela React Native (task #31). **A migration 0005 precisa ser
+    aplicada no Supabase à mão** antes de o app funcionar.
 - ✅ **Spec 07 (motor de projeção/notificação)** — `app/notifications/engine.py`
   é a regra única, chamada pelo gatilho de evento (BackgroundTasks após
   create/update/**delete** de transaction) e pelo cron
