@@ -37,6 +37,19 @@ export function isPositiveAmount(digits: string): boolean {
 }
 
 /**
+ * Campo preenchido, mesmo que com zero.
+ *
+ * Existe porque zero é resposta válida em alguns campos e inválida em outros.
+ * `isPositiveAmount` serve para valor de lançamento, em que R$ 0,00 não é gasto.
+ * Já o saldo da reserva pode ser zero de verdade — e "gastei minha reserva" é
+ * justamente o momento em que a pessoa mais quer atualizar o número. Exigir
+ * positivo ali trancava o único caminho para registrar isso.
+ */
+export function hasAmount(digits: string): boolean {
+  return digits.length > 0;
+}
+
+/**
  * 42.5 -> '4250', para preencher o campo de moeda com o valor lido pelo OCR.
  *
  * Arredonda de propósito: `19.99 * 100` dá 1998.9999999999998 em ponto

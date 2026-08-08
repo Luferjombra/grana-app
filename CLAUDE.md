@@ -472,12 +472,29 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     (sinal depois do R$). Nunca apareceu antes porque todo valor da API era
     positivo, com o sinal no `type` da transação — a variação mês a mês foi o
     primeiro negativo de verdade do app.
-- ⏳ Gamificação (spec 09) — **parada em decisão do usuário sobre a regra de XP**
-  (quanto vale registrar vs quanto vale bater a meta). A aba Metas segue fora do
-  `(tabs)/_layout.tsx` de propósito.
-- ⏳ Tela da reserva de emergência (task #35) — backend pronto. **Falta decidir
-  onde ela mora**: não há aba pra ela hoje (candidatos: dentro de Metas, tela
-  empilhada a partir da Home, ou seção da aba Insights).
+- ✅ **Aba Metas** (`app/(app)/(tabs)/metas.tsx`) — 4ª aba, com a **reserva de
+  emergência** e a **meta de poupança do mês**. Fecha a task #35.
+  - **A aba nunca precisou da regra de XP; precisava de uma meta.** A reserva já
+    era uma (alvo, progresso, prazo implícito) e estava construída sem ter onde
+    morar: criada no onboarding e **invisível desde então**, com o alerta de marco
+    sem destino. Foi isso que destravou a aba, não a decisão de gamificação.
+  - Avaliado contra colocar na Home (gastaria o espaço mais disputado com dado
+    que muda 1×/mês e empurraria "onde você gastou" abaixo da dobra) e em
+    Insights (modo mental errado: passado contra futuro).
+  - Complemento na Home: **uma linha**, não um bloco —
+    `Reserva: 3,5 de 6 meses` levando pra aba. Falha em silêncio, é atalho.
+  - **Saldo aceita zero** (`hasAmount` em `lib/money.ts`), gasto essencial não.
+    "Gastei minha reserva" é o momento em que a pessoa mais quer atualizar o
+    número, e `isPositiveAmount` trancava o único caminho. Zerar o baseline, ao
+    contrário, zeraria a meta e diria "reserva completa" com nada.
+  - Sugestão de baseline é **oferecida**, nunca aplicada sozinha.
+  - `GET /emergency-reserve` passou a ler os 3 meses da sugestão em **uma
+    consulta de intervalo**: como a Home chama esse endpoint no foco, três idas
+    sequenciais viravam latência na tela mais aberta do app.
+- ⏳ Gamificação (spec 09) — **não bloqueia mais nada**. XP, nível, conquistas e
+  cofrinho entram como segunda seção da aba Metas, que já existe e tem conteúdo.
+  Continua parada na decisão do usuário sobre a regra de XP (quanto vale
+  registrar vs quanto vale bater a meta).
 
 ## Próximos passos sugeridos (retomar por aqui)
 

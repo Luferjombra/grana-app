@@ -19,8 +19,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 
 from app.auth import CurrentUser
-from app.budget import targets as targets_module
-from app.common import money, previous_month, to_decimal, today_local
+from app.common import money, month_bounds, previous_month, to_decimal, today_local
 from app.db import get_db
 from app.notifications.engine import evaluate_reserve
 from app.profile.schemas import RESERVE_MONTHS
@@ -189,17 +188,41 @@ async def _suggested_baseline(household_id: int) -> Decimal | None:
     ignora mês sem gasto nenhum, que quase sempre significa "não registrei" e
     não "não gastei" — mesma leitura que o `goal_hit` da spec 07 faz.
     """
-    month = previous_month(today_local().replace(day=1))
-    values: list[Decimal] = []
+    current_start = today_local().replace(day=1)
+    newest = previous_month(current_start)
+    oldest = newest
+    for _ in range(BASELINE_MONTHS - 1):
+        oldest = previous_month(oldest)
 
-    for _ in range(BASELINE_MONTHS):
-        rows = await targets_module.fetch_month_transactions(household_id, month)
-        totals = targets_module.aggregate_month(rows)
-        essential = totals.by_bucket.get("necessidades", Decimal("0"))
-        if essential > 0:
-            values.append(essential)
-        month = previous_month(month)
+    # Uma consulta de intervalo, não três por mês. Este GET é chamado no foco da
+    # Home (pela linha "Reserva: 3,5 de 6 meses") e na aba Metas, então três
+    # idas sequenciais ao banco viravam latência na tela mais aberta do app.
+    rows = await _fetch_essential_range(household_id, oldest, month_bounds(newest)[1])
 
+    by_month: dict[str, Decimal] = {}
+    for row in rows:
+        if (row.get("categories") or {}).get("bucket") != "necessidades":
+            continue
+        key = row["occurred_at"][:7]
+        by_month[key] = by_month.get(key, Decimal("0")) + to_decimal(row["amount"])
+
+    # Mês sem gasto simplesmente não está no dict, então já fica fora da média:
+    # zero quase sempre é "não registrei", não "não gastei".
+    values = [value for value in by_month.values() if value > 0]
     if not values:
         return None
     return (sum(values) / len(values)).quantize(Decimal("0.01"))
+
+
+async def _fetch_essential_range(household_id: int, start, end) -> list[dict]:
+    query = (
+        get_db()
+        .table("transactions")
+        .select("amount, type, occurred_at, categories(bucket)")
+        .eq("household_id", household_id)
+        .eq("type", "expense")
+        .gte("occurred_at", start.isoformat())
+        .lt("occurred_at", end.isoformat())
+    )
+    result = await asyncio.to_thread(query.execute)
+    return result.data or []

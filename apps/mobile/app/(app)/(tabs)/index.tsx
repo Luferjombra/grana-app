@@ -13,12 +13,14 @@ import {
 import { formatApiAmount } from '../../../lib/money';
 import { getNotifications } from '../../../lib/notifications';
 import { getProfile, type Profile } from '../../../lib/profile';
+import { getReserve, type Reserve } from '../../../lib/reserve';
 
 export default function Home() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [unread, setUnread] = useState(0);
   const [summaryFailed, setSummaryFailed] = useState(false);
+  const [reserve, setReserve] = useState<Reserve | null>(null);
 
   const month = currentMonth();
 
@@ -43,6 +45,17 @@ export default function Home() {
         })
         .catch(() => {
           if (!cancelled) setSummaryFailed(true);
+        });
+
+      // Uma linha, não um bloco: a reserva muda uma vez por mês e não merece o
+      // espaço mais disputado do app, mas desaparece do produto inteiro se a Home
+      // não apontar pra ela. Falha em silêncio — é atalho, não conteúdo.
+      getReserve()
+        .then((data) => {
+          if (!cancelled) setReserve(data);
+        })
+        .catch(() => {
+          if (!cancelled) setReserve(null);
         });
 
       // Badge é acessório: se falhar, some em silêncio em vez de virar erro.
@@ -76,6 +89,15 @@ export default function Home() {
           ) : null}
         </Pressable>
       </View>
+
+      {reserve?.months_covered ? (
+        <Pressable style={styles.reserveLine} onPress={() => router.push('/(app)/(tabs)/metas')}>
+          <Text style={styles.reserveText}>
+            Reserva: {reserve.months_covered.replace('.', ',')} de {reserve.months_multiplier} meses
+          </Text>
+          <Text style={styles.reserveArrow}>›</Text>
+        </Pressable>
+      ) : null}
 
       {summaryFailed ? (
         <Text style={styles.error}>Não foi possível carregar o resumo do mês.</Text>
@@ -186,6 +208,18 @@ function clampPercent(value: string): number {
 }
 
 const styles = StyleSheet.create({
+  reserveLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    backgroundColor: '#1c2028',
+    borderRadius: 9,
+    marginTop: 4,
+  },
+  reserveText: { color: '#8a8f98', fontSize: 11.5 },
+  reserveArrow: { color: '#5c626b', fontSize: 15 },
   container: {
     padding: 20,
     gap: 14,

@@ -6,13 +6,13 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.auth import CurrentUser
-from app.budget import targets as targets_module
 from app.reserve import service
 from app.reserve.schemas import ReserveUpdate
 from tests.fakes import FakeDb
 
 USER = CurrentUser(user_id="user-1", household_id=42)
 TODAY = date(2026, 8, 15)
+OTHER_HOUSEHOLD = 99
 
 
 def reserve(**over):
@@ -27,27 +27,30 @@ def reserve(**over):
     return row
 
 
+def essential_tx(month: str, amount: str, bucket: str = "necessidades"):
+    """Despesa no dia 10 do mês, com o bucket embutido como o PostgREST devolve."""
+    return {
+        "household_id": 42,
+        "amount": amount,
+        "type": "expense",
+        "occurred_at": f"{month}-10",
+        "categories": {"bucket": bucket},
+    }
+
+
 def install(monkeypatch, db, essential: dict[str, str] | None = None):
-    """`essential` mapeia 'AAAA-MM' -> gasto em necessidades daquele mês."""
+    """`essential` mapeia 'AAAA-MM' -> gasto em necessidades daquele mês.
+
+    Semeia transações de verdade em vez de mockar o agregado: a sugestão de
+    baseline passou a ser **uma consulta de intervalo**, não três por mês, porque
+    o GET roda no foco da Home e três idas sequenciais viravam latência na tela
+    mais aberta do app. Mockar `aggregate_month` deixaria de exercitar isso.
+    """
+    for month, amount in (essential or {}).items():
+        db.rows("transactions").append(essential_tx(month, amount))
+
     monkeypatch.setattr(service, "get_db", lambda: db)
     monkeypatch.setattr(service, "today_local", lambda: TODAY)
-
-    async def fake_fetch(household_id, month_start):
-        return [{"month": month_start.strftime("%Y-%m")}]
-
-    def fake_aggregate(rows):
-        key = list(rows)[0]["month"]
-        amount = Decimal((essential or {}).get(key, "0"))
-        return targets_module.MonthTotals(
-            income=Decimal("0"),
-            expense=amount,
-            by_bucket={"necessidades": amount},
-            by_category={},
-            uncategorized_expense=Decimal("0"),
-        )
-
-    monkeypatch.setattr(targets_module, "fetch_month_transactions", fake_fetch)
-    monkeypatch.setattr(targets_module, "aggregate_month", fake_aggregate)
     return db
 
 
@@ -365,3 +368,44 @@ async def test_zero_baseline_is_not_a_complete_reserve(monkeypatch):
     assert result["complete"] is False
     assert result["progress_pct"] == 0
     assert result["months_covered"] is None
+
+
+async def test_suggestion_reads_the_three_months_in_one_query(monkeypatch):
+    """Uma consulta de intervalo, não três por mês. O GET roda no foco da Home
+    (pela linha "Reserva: 3,5 de 6 meses") e na aba Metas, então três idas
+    sequenciais viravam latência na tela mais aberta do app."""
+    db = install(
+        monkeypatch,
+        FakeDb({"emergency_reserve": [reserve()]}),
+        essential={"2026-07": "6000.00", "2026-06": "6000.00", "2026-05": "6000.00"},
+    )
+
+    await service.get_reserve(USER)
+
+    reads = [q for q in db.queries if q.table == "transactions"]
+    assert len(reads) == 1
+    assert reads[0].filters["occurred_at__gte"] == "2026-05-01"
+    assert reads[0].filters["occurred_at__lt"] == "2026-08-01"
+
+
+async def test_suggestion_ignores_desires_in_the_average(monkeypatch):
+    """A reserva sustenta o essencial se a renda parar; incluir desejos inflaria
+    a meta pra um padrão de vida que ninguém mantém desempregado."""
+    db = install(monkeypatch, FakeDb({"emergency_reserve": [reserve()]}))
+    db.rows("transactions").append(essential_tx("2026-07", "9000.00"))
+    db.rows("transactions").append(essential_tx("2026-07", "5000.00", bucket="desejos"))
+
+    result = await service.get_reserve(USER)
+
+    assert result["suggested_baseline"]["amount"] == "9000.00"
+
+
+async def test_suggestion_ignores_another_household(monkeypatch):
+    db = install(monkeypatch, FakeDb({"emergency_reserve": [reserve()]}))
+    outro = essential_tx("2026-07", "9000.00")
+    outro["household_id"] = OTHER_HOUSEHOLD
+    db.rows("transactions").append(outro)
+
+    result = await service.get_reserve(USER)
+
+    assert result["suggested_baseline"] is None
