@@ -147,3 +147,23 @@ describe('sumApiAmounts', () => {
     expect(sumApiAmounts(['0.04'])).toBe('0.04');
   });
 });
+
+describe('formatApiAmount com valor negativo', () => {
+  it('põe o sinal antes do R$, como manda a convenção', () => {
+    // 'R$ -80,00' era o que saía antes. Só apareceu com a variação mês a mês dos
+    // insights: até então todo valor da API era positivo, com o sinal no `type`.
+    expect(formatApiAmount('-80.00')).toBe('-R$ 80,00');
+  });
+
+  it('mantém o separador de milhar no negativo', () => {
+    expect(formatApiAmount('-1234.56')).toBe('-R$ 1.234,56');
+  });
+
+  it('não mexe no positivo', () => {
+    expect(formatApiAmount('8000.00')).toBe('R$ 8.000,00');
+  });
+
+  it('trata zero sem inventar sinal', () => {
+    expect(formatApiAmount('0.00')).toBe('R$ 0,00');
+  });
+});

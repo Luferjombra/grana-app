@@ -457,8 +457,27 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   - **Aporte fora de todos os cinco.** Um investimento mensal de valor fixo
     passa em todo teste de recorrência e entraria no `monthly_total` que a tela
     chama de custo fixo. Foi achado do code-review, não do desenho.
+- ✅ **Aba Insights** (`app/(app)/(tabs)/insights.tsx`) — consome os 5 endpoints,
+  desenhada em `prototipo/14-insights-v2.html`. Terceira aba, ao lado de Início e
+  Atividade. Decisões:
+  - **O aviso de mês parcial aparece na tela.** O backend corta os dois meses no
+    mesmo dia pra não anunciar economia falsa; se a tela não dissesse isso, o
+    cuidado do backend morreria ali. **Não remover essa tarja.**
+  - As 5 chamadas são independentes, **sem `Promise.all`** — mesma lição da Home.
+    Só mostra erro quando as cinco falham; com 1 a 4, o que veio aparece.
+  - Não reordena `by_category`: o backend já manda por variação em reais.
+  - `deltaText` e `overshoot` vivem em `lib/insights-format.ts`, puro e testado,
+    porque é onde os casos de borda do contrato aparecem.
+  - **`formatApiAmount` ganhou tratamento de negativo**: devolvia `R$ -80,00`
+    (sinal depois do R$). Nunca apareceu antes porque todo valor da API era
+    positivo, com o sinal no `type` da transação — a variação mês a mês foi o
+    primeiro negativo de verdade do app.
 - ⏳ Gamificação (spec 09) — **parada em decisão do usuário sobre a regra de XP**
-  (quanto vale registrar vs quanto vale bater a meta).
+  (quanto vale registrar vs quanto vale bater a meta). A aba Metas segue fora do
+  `(tabs)/_layout.tsx` de propósito.
+- ⏳ Tela da reserva de emergência (task #35) — backend pronto. **Falta decidir
+  onde ela mora**: não há aba pra ela hoje (candidatos: dentro de Metas, tela
+  empilhada a partir da Home, ou seção da aba Insights).
 
 ## Próximos passos sugeridos (retomar por aqui)
 

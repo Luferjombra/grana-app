@@ -72,9 +72,17 @@ export function sumApiAmounts(amounts: string[]): string {
   return `${sign}${absolute.slice(0, -2)}.${absolute.slice(-2)}`;
 }
 
-/** '8000.00' -> 'R$ 8.000,00', para exibir valores vindos da API. */
+/**
+ * '8000.00' -> 'R$ 8.000,00', para exibir valores vindos da API.
+ *
+ * O sinal negativo vai **antes** do "R$", que é a convenção em português:
+ * '-80.00' -> '-R$ 80,00', não 'R$ -80,00'. Isso só apareceu com os insights —
+ * até então todo valor da API era positivo, com o sinal vivendo no `type` da
+ * transação, e a variação mês a mês foi o primeiro negativo de verdade.
+ */
 export function formatApiAmount(amount: string): string {
-  const [whole = '0', cents = '00'] = amount.split('.');
+  const negative = amount.trimStart().startsWith('-');
+  const [whole = '0', cents = '00'] = amount.replace('-', '').split('.');
   const withThousands = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `R$ ${withThousands},${cents.padEnd(2, '0').slice(0, 2)}`;
+  return `${negative ? '-' : ''}R$ ${withThousands},${cents.padEnd(2, '0').slice(0, 2)}`;
 }
