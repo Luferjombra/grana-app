@@ -245,8 +245,27 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     reimportar o arquivo traz só o que ficou de fora, porque o já importado é
     barrado pelo FITID. **No CSV isso não vale** (sem id, duplicata é só avisada):
     furo aceito e não resolvido, por decisão do usuário de focar em OFX.
-  - Pendência: a tela React Native (task #31). **A migration 0005 precisa ser
-    aplicada no Supabase à mão** antes de o app funcionar.
+- ✅ **Tela de import de extrato** (`app/(app)/importar.tsx`) — fecha a spec 11
+  ponta a ponta. Bandeja por categoria: escolhe a categoria, marca tudo que
+  pertence a ela, atribui em lote. Entrada pela tela de adicionar, ao lado de
+  "Escanear recibo". Usa `expo-document-picker` (SDK 57).
+  - **A contabilidade mora em `lib/import-tray.ts`**, puro e sem import de
+    client de API, porque é onde a invariante pode quebrar. Teste garante
+    `resolvidos + adiados + órfãos == total` a cada passo, inclusive tirando
+    item de grupo já adiado. **Não mover essa lógica pra dentro da tela.**
+  - Adiar dá destino sem resolver, então não trava; o que trava é unidade sem
+    destino nenhum. O adiado não é enviado no confirm.
+  - **Falha ao salvar volta pra bandeja com as escolhas intactas.** Refazer 27
+    decisões por queda de rede seria o pior desfecho. Já falha no preview volta
+    pra escolha do arquivo — ao contrário do recibo, nada foi gravado.
+  - A unidade carrega o **índice real** de cada item no grupo. A 1ª versão
+    casava por (data, valor, descrição), e com dois lançamentos idênticos no
+    mesmo grupo o `✕` mexia sempre no primeiro e depois não fazia nada.
+  - `sumApiAmounts` (`lib/money.ts`) soma **em centavos pela string**: o total
+    do backend deixa de valer quando um item sai do grupo, e recalcular com
+    `Number()`/`toFixed` reintroduziria float em dinheiro.
+  - **Pendência sua: aplicar a migration 0005 no Supabase à mão** antes de o
+    app funcionar.
 - ✅ **Spec 07 (motor de projeção/notificação)** — `app/notifications/engine.py`
   é a regra única, chamada pelo gatilho de evento (BackgroundTasks após
   create/update/**delete** de transaction) e pelo cron
@@ -354,20 +373,16 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
 
 ## Próximos passos sugeridos (retomar por aqui)
 
-1. **Backend do funil de import** (`specs/11` revisada): migration 0005 com a
-   tabela `import_rules`, parâmetro `month` no `preview_import` (default = mês
-   mais recente do arquivo), aplicar regra salva antes da palavra-chave, e
-   gravar regra nova no confirm. É o que destrava a tela.
-2. **`deferred` no confirm de import** — a bandeja "decidir depois". Decidir
-   antes: o adiado é só estado do cliente (o usuário reimporta o arquivo) ou
-   persiste no servidor? Persistir contraria o preview stateless que a spec 11
-   escolheu pra evitar migration e limpeza de lote abandonado.
-3. **Tela mobile do import** — variante C (bandeja por categoria), desenhada em
-   `prototipo/13-import-variantes.html`. Testar a invariante
-   `resolvidos + adiados == total do mês`.
-4. Endpoints de insights, reserva de emergência e gamificação (spec 09) — só
-   depois deles as abas Insights e Metas fazem sentido. A reserva também
-   destrava o alerta `reserve_progress`, que ficou de fora da spec 07.
+1. **Endpoints de insights** (spec 09) — 5 endpoints, nenhum existe. Junto com
+   a reserva, é o que faz as abas Insights e Metas deixarem de ser promessa.
+2. **Endpoints da reserva de emergência** (spec 09) — destrava também o alerta
+   `reserve_progress`, que ficou de fora da spec 07 porque nada escreve em
+   `emergency_reserve.current_balance`.
+3. **Gamificação e cofrinho** (spec 09) — precisa de decisão sobre a regra de XP
+   antes de codar.
+4. **Filtro de "já importado" no preview** (task #33, baixa) — na segunda
+   passada o usuário reimporta o arquivo e rola 100 linhas pra achar 5. A linha
+   já diz "já importado"; falta poder esconder o resto.
 5. Push notifications — precisa de tabela `push_tokens`, que não existe, e do
    projeto Expo/EAS nascer (spec 08).
 6. Open Finance/Pluggy — **bloqueado por regulação**, não retomar sem revisitar

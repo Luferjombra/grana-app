@@ -5,6 +5,7 @@ import {
   formatCents,
   isPositiveAmount,
   numberToCents,
+  sumApiAmounts,
 } from './money';
 
 describe('extractDigits', () => {
@@ -117,5 +118,32 @@ describe('formatApiAmount', () => {
 
   it('tolera valor sem casas decimais', () => {
     expect(formatApiAmount('8000')).toBe('R$ 8.000,00');
+  });
+});
+
+describe('sumApiAmounts', () => {
+  it('soma sem passar por float', () => {
+    // Number('0.1') + Number('0.2') dá 0.30000000000000004
+    expect(sumApiAmounts(['0.10', '0.20'])).toBe('0.30');
+  });
+
+  it('soma os centavos que o extrato real tinha nos extremos', () => {
+    expect(sumApiAmounts(['0.02', '23395.00'])).toBe('23395.02');
+  });
+
+  it('devolve 0.00 para lista vazia', () => {
+    expect(sumApiAmounts([])).toBe('0.00');
+  });
+
+  it('não perde centavo em soma longa', () => {
+    expect(sumApiAmounts(Array.from({ length: 100 }, () => '0.07'))).toBe('7.00');
+  });
+
+  it('trata valor sem parte decimal', () => {
+    expect(sumApiAmounts(['10', '5.5'])).toBe('15.50');
+  });
+
+  it('mantém o resultado abaixo de um real com zero à esquerda', () => {
+    expect(sumApiAmounts(['0.04'])).toBe('0.04');
   });
 });

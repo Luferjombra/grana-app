@@ -119,9 +119,16 @@ export default function Adicionar() {
       <Text style={styles.amount}>R$ {formatCents(cents) || '0,00'}</Text>
 
       {type === 'expense' ? (
-        <Pressable style={styles.scan} onPress={() => router.replace('/(app)/recibo')}>
-          <Text style={styles.scanText}>Escanear recibo</Text>
-        </Pressable>
+        <View style={styles.shortcuts}>
+          <Pressable style={styles.scan} onPress={() => router.replace('/(app)/recibo')}>
+            <Text style={styles.scanText}>Escanear recibo</Text>
+          </Pressable>
+          {/* Import de extrato é a ponte com o banco desde que Open Finance foi
+              adiado (docs/adr/0001), então precisa de porta visível. */}
+          <Pressable style={styles.scan} onPress={() => router.replace('/(app)/importar')}>
+            <Text style={styles.scanText}>Importar extrato</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       {showsCategories ? (
@@ -316,7 +323,12 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: '500',
   },
+  shortcuts: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   scan: {
+    flex: 1,
     backgroundColor: '#1c2028',
     borderRadius: 10,
     paddingVertical: 10,

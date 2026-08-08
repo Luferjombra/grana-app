@@ -47,6 +47,31 @@ export function numberToCents(value: number): string {
   return String(Math.round(value * 100));
 }
 
+/**
+ * Soma valores decimais da API e devolve outro decimal: ['10.50','0.02'] ->
+ * '10.52'.
+ *
+ * Converte para centavos **pela string**, sem passar por float em momento
+ * nenhum. `Number('0.1') + Number('0.2')` dá 0.30000000000000004, e a regra do
+ * projeto é que dinheiro nunca vira float (specs/09).
+ *
+ * Existe porque o total que o backend manda por grupo deixa de valer quando o
+ * usuário tira um item do grupo, e aí a tela precisa recalcular.
+ */
+export function sumApiAmounts(amounts: string[]): string {
+  const cents = amounts.reduce((total, amount) => {
+    const negative = amount.trimStart().startsWith('-');
+    const [whole = '0', decimals = ''] = amount.replace('-', '').split('.');
+    const value = Number(`${whole || '0'}${decimals.padEnd(2, '0').slice(0, 2)}`);
+    if (!Number.isFinite(value)) return total;
+    return total + (negative ? -value : value);
+  }, 0);
+
+  const sign = cents < 0 ? '-' : '';
+  const absolute = String(Math.abs(cents)).padStart(3, '0');
+  return `${sign}${absolute.slice(0, -2)}.${absolute.slice(-2)}`;
+}
+
 /** '8000.00' -> 'R$ 8.000,00', para exibir valores vindos da API. */
 export function formatApiAmount(amount: string): string {
   const [whole = '0', cents = '00'] = amount.split('.');

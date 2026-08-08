@@ -68,6 +68,7 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="adicionar" options={{ presentation: 'modal' }} />
       <Stack.Screen name="recibo" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="importar" />
       <Stack.Screen name="notificacoes" />
     </Stack>
   );
