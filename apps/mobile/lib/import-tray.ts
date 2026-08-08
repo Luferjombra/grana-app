@@ -49,9 +49,29 @@ export type Unit = {
   /** Grupo cuja chave é vazia já vem com um item só: o backend não agrupa
    *  lançamento sem descrição, então não faz sentido oferecer "✕" nele. */
   canSplit: boolean;
+  /** Todos os itens já estão no banco (OFX, confirmado pelo FITID). A tela pode
+   *  esconder, e nada disso é reenviado no confirm. */
+  alreadyImported: boolean;
 };
 
+/**
+ * Já está no banco, com certeza.
+ *
+ * Exige `external_id`: no OFX o FITID é id do banco, então duplicata é fato e o
+ * backend bloqueia por índice único. No CSV não há id, e `likely_duplicate` é um
+ * palpite por data+valor+descrição — dois cafés iguais no mesmo dia são
+ * legítimos, e tratar palpite como fato descartaria um gasto real em silêncio
+ * (specs/11).
+ */
+function alreadyImported(items: ImportItem[]): boolean {
+  return items.length > 0 && items.every((item) => !!item.external_id && item.likely_duplicate);
+}
+
 function needsCategory(items: ImportItem[]): boolean {
+  // Já importado não pede nada: a transação existe e tem categoria no banco.
+  // Sem isto, a segunda passada (reimportar o arquivo pelos adiados) travaria o
+  // botão exigindo categoria de lançamento que já entrou.
+  if (alreadyImported(items)) return false;
   return items.some((item) => item.type === 'expense');
 }
 
@@ -76,6 +96,7 @@ export function buildUnits(groups: ImportGroup[], removed: Removed = {}): Unit[]
         isLoose: false,
         groupIndex,
         canSplit: kept.length > 1,
+        alreadyImported: alreadyImported(kept),
       });
     }
 
@@ -91,11 +112,12 @@ export function buildUnits(groups: ImportGroup[], removed: Removed = {}): Unit[]
           count: 1,
           items: [item],
           itemIndexes: [itemIndex],
-          needsCategory: item.type === 'expense',
+          needsCategory: needsCategory([item]),
           isLoose: true,
           groupIndex,
           itemIndex,
           canSplit: false,
+          alreadyImported: alreadyImported([item]),
         });
       });
   });
@@ -193,6 +215,9 @@ export function toConfirmRows(units: Unit[], assignment: Assignment): ImportConf
   units.forEach((unit) => {
     if (isDeferred(unit, assignment)) return;
     if (!isSettled(unit, assignment)) return;
+    // Já está no banco: o backend descartaria pelo FITID, mas mandar de volta
+    // gastaria payload e faria `skipped` contar coisa que nunca foi escolhida.
+    if (unit.alreadyImported) return;
 
     const destination = assignment[unit.id];
     const categoryId = typeof destination === 'number' ? destination : null;

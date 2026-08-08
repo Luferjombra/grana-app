@@ -43,6 +43,7 @@ export default function ImportarScreen() {
   const [marked, setMarked] = useState<Record<string, true>>({});
   const [bin, setBin] = useState<Destination | null>(null);
   const [open, setOpen] = useState<Record<string, true>>({});
+  const [hideImported, setHideImported] = useState(true);
   const [result, setResult] = useState<{ imported: number; rules: number; left: number } | null>(
     null,
   );
@@ -53,6 +54,7 @@ export default function ImportarScreen() {
     [preview, removed],
   );
   const total = totalCount(units);
+  const importedUnits = units.filter((unit) => unit.alreadyImported);
   const resolved = resolvedCount(units, assignment);
   const deferred = deferredCount(units, assignment);
   const pending = orphans(units, assignment);
@@ -302,112 +304,130 @@ export default function ImportarScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {orderUnits(units, assignment).map((unit) => {
-          const destination = assignment[unit.id];
-          const settled = destination !== undefined;
-          const isDefer = destination === DEFER;
+        {importedUnits.length > 0 ? (
+          <Pressable
+            style={styles.toggle}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: hideImported }}
+            onPress={() => setHideImported((value) => !value)}
+          >
+            <Text style={styles.toggleText}>
+              {hideImported ? 'Mostrar' : 'Esconder'} {importedUnits.length} que já entraram
+            </Text>
+          </Pressable>
+        ) : null}
 
-          return (
-            <View
-              key={unit.id}
-              style={[
-                styles.row,
-                marked[unit.id] && styles.rowMarked,
-                settled && !isDefer && styles.rowTaken,
-                isDefer && styles.rowDefer,
-              ]}
-            >
-              <View style={styles.rowHead}>
-                <Pressable
-                  style={styles.rowMain}
-                  disabled={settled || !unit.needsCategory}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: !!marked[unit.id], disabled: settled }}
-                  onPress={() => toggleMark(unit.id)}
-                >
-                  <View
-                    style={[
-                      styles.box,
-                      marked[unit.id] && styles.boxOn,
-                      settled && styles.boxPlain,
-                    ]}
-                  >
-                    <Text style={styles.boxMark}>
-                      {settled ? (isDefer ? '·' : '✓') : marked[unit.id] ? '✓' : ''}
-                    </Text>
-                  </View>
+        {orderUnits(units, assignment)
+          .filter((unit) => !(hideImported && unit.alreadyImported))
+          .map((unit) => {
+            const destination = assignment[unit.id];
+            const settled = destination !== undefined;
+            const isDefer = destination === DEFER;
 
-                  <View style={styles.rowText}>
-                    <Text style={styles.rowName} numberOfLines={1}>
-                      {unit.label}
-                    </Text>
-                    <Text style={styles.rowMeta}>{describe(unit, destination, categories)}</Text>
-                  </View>
-                </Pressable>
-
-                {unit.canSplit ? (
+            return (
+              <View
+                key={unit.id}
+                style={[
+                  styles.row,
+                  marked[unit.id] && styles.rowMarked,
+                  settled && !isDefer && styles.rowTaken,
+                  isDefer && styles.rowDefer,
+                ]}
+              >
+                <View style={styles.rowHead}>
                   <Pressable
-                    style={styles.iconButton}
-                    accessibilityLabel="Ver lançamentos"
-                    onPress={() =>
-                      setOpen((current) => {
-                        const next = { ...current };
-                        if (next[unit.id]) delete next[unit.id];
-                        else next[unit.id] = true;
-                        return next;
-                      })
-                    }
+                    style={styles.rowMain}
+                    disabled={settled || !unit.needsCategory}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: !!marked[unit.id], disabled: settled }}
+                    onPress={() => toggleMark(unit.id)}
                   >
-                    <Ionicons
-                      name={open[unit.id] ? 'chevron-up' : 'chevron-down'}
-                      size={15}
-                      color="#5c626b"
-                    />
-                  </Pressable>
-                ) : null}
-
-                {unit.isLoose ? (
-                  <Pressable
-                    style={styles.iconButton}
-                    accessibilityLabel="Devolver ao grupo"
-                    // Calcula fora dos updaters: chamar setAssignment dentro do
-                    // updater de setRemoved é efeito colateral numa função que o
-                    // React pode reexecutar.
-                    onPress={() => restore(unit.groupIndex, unit.itemIndex as number, unit.id)}
-                  >
-                    <Ionicons name="arrow-undo-outline" size={15} color="#8a8f98" />
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {open[unit.id]
-                ? unit.items.map((entry, index) => (
-                    <View key={`${unit.groupIndex}-${unit.itemIndexes[index]}`} style={styles.item}>
-                      <Text style={styles.itemDesc} numberOfLines={1}>
-                        {entry.description || 'Sem descrição'}
+                    <View
+                      style={[
+                        styles.box,
+                        marked[unit.id] && styles.boxOn,
+                        settled && styles.boxPlain,
+                      ]}
+                    >
+                      <Text style={styles.boxMark}>
+                        {settled ? (isDefer ? '·' : '✓') : marked[unit.id] ? '✓' : ''}
                       </Text>
-                      <Text style={styles.itemValue}>{formatApiAmount(entry.amount)}</Text>
-                      <Pressable
-                        accessibilityLabel="Não é deste grupo"
-                        hitSlop={8}
-                        // Índice real do item no grupo, não a posição na lista
-                        // exibida nem uma busca por conteúdo: dois lançamentos
-                        // idênticos no mesmo grupo são comuns, e a busca acharia
-                        // sempre o primeiro.
-                        onPress={() =>
-                          setRemoved((current) =>
-                            removeItem(current, unit.groupIndex, unit.itemIndexes[index]),
-                          )
-                        }
-                      >
-                        <Text style={styles.itemRemove}>✕</Text>
-                      </Pressable>
                     </View>
-                  ))
-                : null}
-            </View>
-          );
-        })}
+
+                    <View style={styles.rowText}>
+                      <Text style={styles.rowName} numberOfLines={1}>
+                        {unit.label}
+                      </Text>
+                      <Text style={styles.rowMeta}>{describe(unit, destination, categories)}</Text>
+                    </View>
+                  </Pressable>
+
+                  {unit.canSplit ? (
+                    <Pressable
+                      style={styles.iconButton}
+                      accessibilityLabel="Ver lançamentos"
+                      onPress={() =>
+                        setOpen((current) => {
+                          const next = { ...current };
+                          if (next[unit.id]) delete next[unit.id];
+                          else next[unit.id] = true;
+                          return next;
+                        })
+                      }
+                    >
+                      <Ionicons
+                        name={open[unit.id] ? 'chevron-up' : 'chevron-down'}
+                        size={15}
+                        color="#5c626b"
+                      />
+                    </Pressable>
+                  ) : null}
+
+                  {unit.isLoose ? (
+                    <Pressable
+                      style={styles.iconButton}
+                      accessibilityLabel="Devolver ao grupo"
+                      // Calcula fora dos updaters: chamar setAssignment dentro do
+                      // updater de setRemoved é efeito colateral numa função que o
+                      // React pode reexecutar.
+                      onPress={() => restore(unit.groupIndex, unit.itemIndex as number, unit.id)}
+                    >
+                      <Ionicons name="arrow-undo-outline" size={15} color="#8a8f98" />
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {open[unit.id]
+                  ? unit.items.map((entry, index) => (
+                      <View
+                        key={`${unit.groupIndex}-${unit.itemIndexes[index]}`}
+                        style={styles.item}
+                      >
+                        <Text style={styles.itemDesc} numberOfLines={1}>
+                          {entry.description || 'Sem descrição'}
+                        </Text>
+                        <Text style={styles.itemValue}>{formatApiAmount(entry.amount)}</Text>
+                        <Pressable
+                          accessibilityLabel="Não é deste grupo"
+                          hitSlop={8}
+                          // Índice real do item no grupo, não a posição na lista
+                          // exibida nem uma busca por conteúdo: dois lançamentos
+                          // idênticos no mesmo grupo são comuns, e a busca acharia
+                          // sempre o primeiro.
+                          onPress={() =>
+                            setRemoved((current) =>
+                              removeItem(current, unit.groupIndex, unit.itemIndexes[index]),
+                            )
+                          }
+                        >
+                          <Text style={styles.itemRemove}>✕</Text>
+                        </Pressable>
+                      </View>
+                    ))
+                  : null}
+              </View>
+            );
+          })}
 
         <Pressable
           style={[styles.cta, (bin === null || markedIds.length === 0) && styles.ctaOff]}
@@ -652,4 +672,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   ghostText: { color: '#8a8f98', fontSize: 13 },
+  toggle: { paddingVertical: 8, marginBottom: 4 },
+  toggleText: { color: '#8a8f98', fontSize: 11.5, textDecorationLine: 'underline' },
 });

@@ -279,6 +279,114 @@ async def _upsert_unread(user_id: str, notification: PendingNotification) -> Non
         )
 
 
+# Marcos da reserva de emergência, em meses de gasto essencial cobertos. São os
+# pontos que significam algo pra quem está construindo o colchão; alertar a cada
+# depósito viraria ruído, e cobrar "sua reserva está incompleta" todo mês seria
+# pior — a maioria leva anos pra fechar, e o app não tem por que insistir.
+RESERVE_MILESTONES = (1, 3, 6, 12)
+
+
+def _reserve_notification(months: int, complete: bool, month_start: date) -> PendingNotification:
+    if complete:
+        return PendingNotification(
+            type="reserve_progress",
+            severity="info",
+            title="Reserva de emergência completa",
+            message="Você chegou na meta da sua reserva. É o colchão inteiro que planejou.",
+            reference_month=month_start,
+            subject="complete",
+        )
+    return PendingNotification(
+        type="reserve_progress",
+        severity="info",
+        title=f"{months} {'mês' if months == 1 else 'meses'} de reserva",
+        message=(
+            f"Sua reserva já cobre {months} {'mês' if months == 1 else 'meses'} "
+            "do seu gasto essencial."
+        ),
+        reference_month=month_start,
+        subject=str(months),
+    )
+
+
+async def evaluate_reserve(
+    household_id: int, balance: Decimal, baseline: Decimal, target: Decimal
+) -> list[PendingNotification]:
+    """Gatilho de evento da reserva: roda quando o saldo informado muda.
+
+    Não entra no cron diário porque a reserva só muda quando o usuário diz que
+    mudou — reavaliar todo dia gastaria consulta pra nada.
+
+    Marco é conquista, então **não é reconciliado**: se o usuário depois corrigir
+    o saldo pra baixo, o "3 meses de reserva" que ele já viu não é retirado, do
+    mesmo jeito que `goal_hit` não é.
+    """
+    if baseline <= 0:
+        return []
+
+    covered = balance / baseline
+    reached = [months for months in RESERVE_MILESTONES if covered >= months]
+    complete = target > 0 and balance >= target
+
+    pending: list[PendingNotification] = []
+    month_start = today_local().replace(day=1)
+
+    if reached:
+        pending.append(_reserve_notification(max(reached), False, month_start))
+    if complete:
+        pending.append(_reserve_notification(0, True, month_start))
+
+    if not pending:
+        return []
+
+    user_ids = await _household_member_ids(household_id)
+    for user_id in user_ids:
+        for notification in pending:
+            await _create_once(user_id, notification)
+
+    return pending
+
+
+async def _create_once(user_id: str, notification: PendingNotification) -> None:
+    """Cria o alerta **uma vez na vida**, não uma vez por mês.
+
+    `_upsert_unread` usa (type, reference_month, subject) como chave, o que é
+    certo pra alerta mensal: o teto de agosto é diferente do de setembro. Marco
+    de reserva não é assim — atingir 3 meses acontece uma vez, e a chave mensal
+    faria o app reparabenizar todo dia 1.
+    """
+    db = get_db()
+    existing_query = (
+        db.table("notifications")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("type", notification.type)
+        .eq("subject", notification.subject)
+    )
+    existing = await asyncio.to_thread(existing_query.execute)
+    if existing.data:
+        return
+
+    insert_query = db.table("notifications").insert(
+        {
+            "user_id": user_id,
+            "type": notification.type,
+            "reference_month": notification.reference_month.isoformat(),
+            "subject": notification.subject,
+            "severity": notification.severity,
+            "title": notification.title,
+            "message": notification.message,
+            "read": False,
+        }
+    )
+    try:
+        await asyncio.to_thread(insert_query.execute)
+    except APIError as exc:
+        if exc.code != UNIQUE_VIOLATION:
+            raise
+        logger.info("marco %s já existia para %s", notification.subject, user_id)
+
+
 async def evaluate_after_transaction(household_id: int, occurred_at: str) -> None:
     """Gatilho de evento: reavalia o mês da transação que acabou de mudar."""
     try:

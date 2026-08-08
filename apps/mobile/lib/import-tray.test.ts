@@ -296,3 +296,59 @@ describe('itemIndexes', () => {
     expect(totalCount(units)).toBe(3);
   });
 });
+
+describe('já importado (segunda passada)', () => {
+  const ofxJaImportado = group({
+    items: [item({ external_id: 'ofx:A1', likely_duplicate: true })],
+  });
+
+  it('não pede categoria: a transação já existe no banco', () => {
+    const units = buildUnits([ofxJaImportado]);
+
+    expect(units[0].alreadyImported).toBe(true);
+    expect(units[0].needsCategory).toBe(false);
+    // sem isto, reimportar o arquivo pelos adiados travaria o botão pedindo
+    // categoria de lançamento que já entrou
+    expect(orphans(units, {})).toHaveLength(0);
+  });
+
+  it('não é reenviado no confirm', () => {
+    expect(toConfirmRows(buildUnits([ofxJaImportado]), {})).toHaveLength(0);
+  });
+
+  it('duplicata de CSV continua exigindo decisão', () => {
+    // sem external_id, likely_duplicate é palpite por data+valor+descrição:
+    // dois cafés iguais no mesmo dia são legítimos
+    const csv = group({ items: [item({ external_id: null, likely_duplicate: true })] });
+    const units = buildUnits([csv]);
+
+    expect(units[0].alreadyImported).toBe(false);
+    expect(orphans(units, {})).toHaveLength(1);
+  });
+
+  it('grupo com um item novo ainda pede categoria', () => {
+    const misto = group({
+      items: [
+        item({ external_id: 'ofx:A1', likely_duplicate: true }),
+        item({ external_id: 'ofx:A2', likely_duplicate: false }),
+      ],
+    });
+    const units = buildUnits([misto]);
+
+    expect(units[0].alreadyImported).toBe(false);
+    expect(units[0].needsCategory).toBe(true);
+  });
+
+  it('item tirado de grupo já importado também não pede categoria', () => {
+    const dois = group({
+      items: [
+        item({ external_id: 'ofx:A1', likely_duplicate: true }),
+        item({ external_id: 'ofx:A2', likely_duplicate: true }),
+      ],
+    });
+    const units = buildUnits([dois], { 0: [1] });
+
+    expect(units.every((unit) => unit.alreadyImported)).toBe(true);
+    expect(orphans(units, {})).toHaveLength(0);
+  });
+});

@@ -369,7 +369,42 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   variáveis no `.env.example`) — custo zero e destrava rápido se a regra mudar.
   - Consequência: **o produto tem duas vias de registro, não três**, e o
     **import CSV/OFX virou a única ponte com o banco** — deixou de ser extra.
+- ✅ **Reserva de emergência** (`app/reserve/`) — `GET|PATCH /emergency-reserve`.
+  Alvo = gasto essencial × meses de colchão (6 clt / 12 autônomo). Decisões:
+  - **`current_balance` entrou no PATCH**, que a spec 09 não previa. Sem ele nada
+    escrevia o saldo, a reserva teria meta e nenhuma forma de dizer quanto já
+    existe. **Não derivar do bucket "poupança"**: misturaria investimento de
+    longo prazo com colchão e diria ao usuário que ele está coberto com dinheiro
+    preso em ativo ilíquido. Manual é a via honesta hoje (Open Finance adiado).
+  - **Baseline sugerido, nunca sobrescrito** — média de necessidades dos 3 meses
+    fechados, mesmo espírito de `ensure_month_targets` não sobrescrever target
+    manual. Só sugere com diferença ≥ 10%, senão vira ruído e o usuário aprende
+    a ignorar. Ignora mês sem gasto ("não registrei" ≠ "não gastei").
+  - Perfil e multiplicador andam **juntos**: "autônomo com 6 meses" não é
+    escolha que a tela oferece e seria estado inconsistente.
+  - `complete` exige `target > 0`: com baseline zerado, `0 >= 0` diria "reserva
+    completa" pra quem não tem nada.
+  - `GET` custa 4 consultas (a reserva + 3 meses da sugestão). Sabido, não
+    otimizado — volume é de 1 household por usuário.
+- ✅ **Alerta `reserve_progress`** — o que a spec 07 tinha adiado por falta de
+  quem escrevesse o saldo. Marcos em 1/3/6/12 meses cobertos + meta batida.
+  - Avaliado **no evento** (PATCH da reserva), não no cron: a reserva só muda
+    quando o usuário diz que mudou.
+  - `_create_once` cria o marco **uma vez na vida**. `_upsert_unread` chaveia por
+    mês, o que é certo pra teto, mas faria o app reparabenizar todo dia 1.
+  - Marco é conquista, então **não é reconciliado**, igual ao `goal_hit`: baixar
+    o saldo depois não retira o "3 meses" que o usuário já viu.
+  - Falha no alerta **não derruba o PATCH** — o saldo já foi gravado.
+- ✅ **Segunda passada do import** — lançamento já importado (OFX, confirmado
+  pelo FITID) não pede categoria, não é reenviado no confirm, e a tela oferece
+  esconder. Sem isso, reimportar o arquivo pelos adiados **travava o botão**
+  pedindo categoria de coisa que já estava no banco.
+  - **Exige `external_id`**: no CSV `likely_duplicate` é palpite por
+    data+valor+descrição, e tratar palpite como fato descartaria gasto real em
+    silêncio. Dois cafés iguais no mesmo dia são legítimos.
 - ⏳ Spec 08 (push) — não iniciada.
+- ⏳ Insights (spec 09) e gamificação — não iniciados. A gamificação depende de
+  uma decisão do usuário sobre a regra de XP.
 
 ## Próximos passos sugeridos (retomar por aqui)
 
