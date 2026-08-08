@@ -80,6 +80,21 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
   risco negativo acima de 97% da renda. Recalculado por evento (toda
   transação salva) + cron diário à meia-noite.
 - Notificações: dentro do app **e** push.
+- **Reserva de emergência: `gasto em necessidades × 6 (clt) ou 12 (autônomo)`.**
+  Revisitado e **mantido** em 08/08/2026, depois de o usuário levantar "deveria
+  ser gasto mensal × 12". As duas partes foram decididas de novo, com os números
+  na mesa:
+  - **Multiplicador segue 6/12**, não 12 pra todos. Doze meses pra CLT fica bem
+    acima da recomendação usual (3-6 meses pra renda estável), e alvo grande
+    demais trava a barra perto de zero por anos — o marco de "1 mês de reserva"
+    passaria a valer 8% da meta em vez de 17%.
+  - **A base segue só necessidades**, não o gasto mensal total. Se a renda
+    parar, Delivery/Streaming/Compras não continuam, então dimensionar o colchão
+    pelo padrão de vida completo infla a meta com gasto que a própria emergência
+    elimina. Num exemplo de renda R$ 8.000 (R$ 4.000 necessidades + R$ 2.400
+    desejos), trocar pra total × 12 levaria o alvo de R$ 24.000 pra R$ 76.800.
+  - É também o que faz a reserva conversar com o 50-30-20: o bucket
+    necessidades já é, por definição, "o que eu não consigo cortar".
 - Categorias padrão do sistema (lista fechada, ver seed): Moradia, Mercado,
   Contas, Transporte (necessidades); Lazer, Compras, Delivery, Streaming
   (desejos); Investimentos (poupança).
@@ -403,8 +418,42 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
     data+valor+descrição, e tratar palpite como fato descartaria gasto real em
     silêncio. Dois cafés iguais no mesmo dia são legítimos.
 - ⏳ Spec 08 (push) — não iniciada.
-- ⏳ Insights (spec 09) e gamificação — não iniciados. A gamificação depende de
-  uma decisão do usuário sobre a regra de XP.
+- ✅ **Insights** (`app/insights/`) — os 5 endpoints da spec 09. O fio condutor
+  é que **toda comparação com o mês corrente mente por omissão**, porque o mês
+  está incompleto; cada função trata isso explicitamente.
+  - `month-over-month` **corta os dois meses no mesmo dia** quando o mês de
+    referência está em curso. Sem isso, dia 5 compararia 5 dias contra 31 e o
+    app anunciaria "você gastou 80% menos" todo começo de mês. Responde
+    `partial` e `comparable_days`. `delta_pct` é **null** quando o mês anterior
+    foi zero — "aumento de 100%" a partir de nada seria invenção.
+  - `by_category` ordena por **variação absoluta**, não percentual: 200% em algo
+    de R$ 3 não é notícia, R$ 400 a mais no mercado é.
+  - `recurring-subscriptions` **detecta das transações**, não da tabela
+    `recurring_subscriptions` — nada escreve nela, e ler dela devolveria lista
+    vazia pra sempre. Reusa `merchant_key` do import. Regra: ≥3 meses distintos
+    + valor estável (tolerância 15%, porque assinatura reajusta). Cancelada é
+    listada com `active: false` e **fora** do `monthly_total`.
+    - **Falso positivo conhecido**: no extrato real, posto de gasolina com
+      R$ 100,00 exatos em 3 meses virou "assinatura". Não corrigido de
+      propósito — dia-do-mês como sinal extra cortaria assinatura de cobrança
+      variável, e aqui o custo do erro é uma olhada, não um bucket errado.
+  - `top-transactions` **exclui aporte** e informa quanto excluiu
+    (`excluded_savings`), em vez de sumir com ele: um aporte grande seria o
+    "maior gasto" do mês sem ser gasto. Devolve `merchant: null` em lançamento
+    sem descrição — **a tela precisa de um rótulo**, não linha em branco.
+  - `three-month-average` usa meses **fechados** e ignora mês sem gasto ("não
+    registrei" ≠ "não gastei", igual ao `goal_hit` e ao baseline da reserva).
+    Não devolve percentual do mês corrente contra a média: no dia 10 estar
+    "40% abaixo" é sempre verdade e nunca útil — pra isso existe a projeção.
+  - `health-score-breakdown` reusa `compute_health_score` (a nota não pode ser
+    calculada de dois jeitos), marca cada bucket como `ceiling` ou `goal`, e sem
+    renda devolve **200 com `reason: "sem_renda"`**, não 404 — a tela precisa
+    explicar, não errar. Expõe `uncategorized_expense`, que não pontua nem pune.
+  - **Aporte fora de todos os cinco.** Um investimento mensal de valor fixo
+    passa em todo teste de recorrência e entraria no `monthly_total` que a tela
+    chama de custo fixo. Foi achado do code-review, não do desenho.
+- ⏳ Gamificação (spec 09) — **parada em decisão do usuário sobre a regra de XP**
+  (quanto vale registrar vs quanto vale bater a meta).
 
 ## Próximos passos sugeridos (retomar por aqui)
 
