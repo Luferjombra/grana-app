@@ -542,6 +542,30 @@ Bucket `receipts` no Supabase Storage: **já criado** (privado) e migration
 6. Open Finance/Pluggy — **bloqueado por regulação**, não retomar sem revisitar
    `docs/adr/0001-open-finance-adiado.md` e confirmar a norma final do BCB.
 
+## Pendências que são do usuário, não do agente
+
+Nenhuma delas eu consigo fazer, e a primeira **bloqueia** o import de extrato.
+
+1. **Aplicar a migration 0005** (`import_rules`) no Supabase. Sem ela o
+   `preview_import` quebra na primeira chamada.
+2. **Confirmar se as migrations 0003 e 0004 rodaram.** Nunca houve confirmação.
+   Sem a 0003 o `/notifications` falha; sem a 0004, reimportar o mesmo OFX
+   duplica tudo. Checagem:
+   `select indexname from pg_indexes where indexname in
+   ('notifications_unique_open_alert','transactions_household_external_id');`
+3. **Rotacionar Supabase service key, Mindee API key e Pluggy client secret.**
+   Foram expostas no histórico de uma conversa (não em commit — verificado).
+4. **Preencher os `.env` locais** com as chaves rotacionadas.
+5. **Rodar o app no celular.** São 4 abas e ~10 telas, e **nenhuma foi vista
+   funcionando de verdade** — só teste unitário e protótipo. O primeiro toque
+   real vai achar o que teste não pega.
+6. **Avaliar o Supabase MCP somente leitura** (task #36). Elimina a ida e volta
+   de migration manual. Começar por leitura: escrita em produção é decisão de
+   risco, não de conveniência.
+7. Revisão jurídica do texto de consentimento LGPD.
+8. Apple Developer Program (US$ 99/ano) desbloqueia Apple Sign-In; projeto
+   Expo/EAS desbloqueia push.
+
 ## Como o usuário prefere trabalhar
 
 Direto e aberto — questionar decisões antes de assumir default, não
@@ -557,3 +581,30 @@ pontuais, pode ir direto ao código.
 2. **Ao commitar, atualizar a seção "Status atual" deste CLAUDE.md** pra
    refletir o que mudou (specs concluídas, pendências novas) — este arquivo é
    o handoff entre sessões, não pode ficar desatualizado.
+
+### Hooks que apoiam esse fluxo (`.claude/settings.json`, versionado)
+
+Dois hooks `PreToolUse` foram adicionados em 08/08/2026, depois de rodar a skill
+`claude-automation-recommender`. Eles são trava a mais, **não** substituem as
+regras acima:
+
+- **`guard_commit.py`** — bloqueia commit que toca `apps/`, `etl/` ou `infra/`
+  sem `CLAUDE.md` no mesmo commit. Verifica a regra 2, que é a única mecanizável.
+  **A regra 1 nenhum hook consegue verificar**: `/code-review` não deixa
+  artefato. O bloqueio aproveita pra lembrar, e nada mais — quem garante é
+  disciplina.
+- **`guard_env_example.py`** — bloqueia escrita em `*.env.example`. Existe por
+  causa de um incidente real: credenciais de verdade foram colar em
+  `apps/backend/.env.example`, que é **rastreado** num repo **público**. As
+  chaves não entraram em commit (verificado com `git log --all -p`), mas por
+  verificação manual, não por processo. Os quatro `.env.example` seguem
+  versionados de propósito — documentam quais variáveis existem.
+  - Falha fechada quando o payload é ilegível **e** menciona `.env.example`;
+    falha aberta quando não menciona, pra uma mudança de formato não travar toda
+    edição do projeto.
+  - Lê o `file_path` do JSON, nunca grep no stdin: este CLAUDE.md menciona
+    `.env.example` em texto, e grep cru bloquearia editar a própria documentação.
+
+Os hooks vivem em `.claude/settings.json` (versionado), **não** em
+`settings.local.json`, que é gitignored — ali eles seriam pessoais e não
+sobreviveriam em outra máquina. Dependem de `python` no PATH.
